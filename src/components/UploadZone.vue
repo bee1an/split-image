@@ -1,6 +1,6 @@
 <script setup lang="ts">
 const emit = defineEmits<{
-  upload: [file: File]
+  upload: [files: File[]]
 }>()
 
 const isDragging = ref(false)
@@ -18,9 +18,9 @@ function handleDragLeave() {
 function handleDrop(e: DragEvent) {
   e.preventDefault()
   isDragging.value = false
-  const file = e.dataTransfer?.files[0]
-  if (file && file.type.startsWith('image/')) {
-    emit('upload', file)
+  const files = Array.from(e.dataTransfer?.files || []).filter(file => file.type.startsWith('image/'))
+  if (files.length > 0) {
+    emit('upload', files)
   }
 }
 
@@ -30,9 +30,9 @@ function handleClick() {
 
 function handleFileChange(e: Event) {
   const target = e.target as HTMLInputElement
-  const file = target.files?.[0]
-  if (file) {
-    emit('upload', file)
+  const files = Array.from(target.files || [])
+  if (files.length > 0) {
+    emit('upload', files)
     target.value = ''
   }
 }
@@ -40,8 +40,8 @@ function handleFileChange(e: Event) {
 
 <template>
   <div
-    border="1 dashed zinc-300 dark:zinc-800"
-    bg="zinc-50 dark:zinc-900/50" hover:border="emerald-500/50" group rounded-xl flex flex-col gap-3 h-40 w-full cursor-pointer transition-all items-center justify-center relative overflow-hidden hover:bg-zinc-100 dark:hover:bg-zinc-900
+    border="1 dashed zinc-300 dark:zinc-800 hover:emerald-500/50"
+    bg="zinc-50 dark:zinc-900/50" group rounded-xl flex flex-col gap-3 h-40 w-full cursor-pointer transition-all items-center justify-center relative overflow-hidden hover:bg-zinc-100 dark:hover:bg-zinc-900
     :class="{ '!border-emerald-500 !bg-emerald-500/5': isDragging }"
     @dragover="handleDragOver"
     @dragleave="handleDragLeave"
@@ -68,6 +68,7 @@ function handleFileChange(e: Event) {
       ref="fileInput"
       type="file"
       accept="image/*"
+      multiple
       hidden
       @change="handleFileChange"
     >

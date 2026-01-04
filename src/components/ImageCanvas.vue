@@ -604,7 +604,7 @@ async function playExportAnimation(targetElement: HTMLElement): Promise<void> {
     >
 
     <!-- Canvas wrapper for proper overlay positioning -->
-    <div class="relative">
+    <div class="bg-checkered rounded-sm relative overflow-hidden">
       <canvas
         ref="canvasRef"
         :style="{ cursor: cursorStyle }"
@@ -623,7 +623,7 @@ async function playExportAnimation(targetElement: HTMLElement): Promise<void> {
       v-if="displaySize.width > 0 && !selectedLineId && !creatingLine && !isAnimating"
       border="1 zinc-200 dark:zinc-800" bg="white/80 dark:zinc-950/80"
 
-      text="[10px] zinc-500" fade-in slide-in-from-bottom-2 animate-in tracking-wider font-bold px-3 py-1 rounded-full flex gap-2 uppercase shadow-xl transition-all items-center bottom-4 absolute backdrop-blur-md dark:shadow-2xl
+      text="[10px] zinc-500" fade-in slide-in-from-bottom-2 animate-in tracking-wider font-bold px-3 py-1 rounded-full flex gap-2 uppercase shadow="xl dark:2xl" transition-all items-center bottom-4 absolute backdrop-blur-md
     >
       <span i-carbon-touch-interaction text-emerald-500 dark:text-emerald-400 />
       从边缘拖拽开始切片

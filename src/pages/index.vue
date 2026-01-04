@@ -2,12 +2,19 @@
 import type { ImageFormat, SplitLine } from '../utils/splitImage'
 import ImageCanvas from '../components/ImageCanvas.vue'
 import UploadZone from '../components/UploadZone.vue'
-import { isDark, toggleDark } from '../composables/dark'
+import { isDark } from '../composables/dark'
+import { useImageState } from '../composables/image'
 import { generateId } from '../utils/common'
 import { downloadAsZip } from '../utils/downloadZip'
 import { splitImage } from '../utils/splitImage'
 
-const imageSrc = ref<string>('')
+const {
+  items,
+  currentIndex,
+  imageSrc,
+  addImages,
+  clearImages: resetImage,
+} = useImageState()
 const splitLines = ref<SplitLine[]>([])
 const isExporting = ref(false)
 const canvasRef = ref<InstanceType<typeof ImageCanvas>>()
@@ -36,17 +43,23 @@ const vLines = computed(() =>
     .sort((a, b) => a.position - b.position),
 )
 
-function handleUpload(file: File) {
-  const reader = new FileReader()
-  reader.onload = (e) => {
-    imageSrc.value = e.target?.result as string
-    splitLines.value = []
-    quickHLines.value = 0
-    quickVLines.value = 0
-    selectedLineId.value = null
-    hoveredLineId.value = null
-  }
-  reader.readAsDataURL(file)
+async function handleUpload(files: File[]) {
+  const newFiles = await Promise.all(
+    files.map(async (file) => {
+      const src = await new Promise<string>((resolve) => {
+        const reader = new FileReader()
+        reader.onload = e => resolve(e.target?.result as string)
+        reader.readAsDataURL(file)
+      })
+      return { name: file.name, src }
+    }),
+  )
+  addImages(newFiles)
+  splitLines.value = []
+  quickHLines.value = 0
+  quickVLines.value = 0
+  selectedLineId.value = null
+  hoveredLineId.value = null
 }
 
 async function handleExport() {
@@ -78,7 +91,7 @@ async function handleExport() {
 }
 
 function handleClear() {
-  imageSrc.value = ''
+  resetImage()
   splitLines.value = []
   quickHLines.value = 0
   quickVLines.value = 0
@@ -144,40 +157,6 @@ function handleLineClick(id: string) {
         </div>
 
         <div v-else p-8 flex flex-col h-full relative z-10 overflow-hidden>
-          <div mb-4 flex items-center justify-between>
-            <div text="[10px]" text-zinc-500 tracking-widest font-bold flex gap-2 uppercase items-center>
-              <span i-carbon-workspace />
-              工作台
-              <span i-carbon-chevron-right text="[8px]" />
-              <span text-emerald-400>active_session</span>
-            </div>
-
-            <div flex gap-3 items-center>
-              <a
-                href="https://github.com/bee1an/split-image"
-                target="_blank"
-                rel="noopener noreferrer"
-                class="text-zinc-700 p-2 rounded-md flex transition-colors dark:text-zinc-300 hover:bg-zinc-200 dark:hover:bg-zinc-800"
-                title="GitHub Repository"
-              >
-                <div i-carbon-logo-github text-lg />
-              </a>
-              <button
-                p-2 rounded-md transition-colors hover:bg-zinc-200 dark:hover:bg-zinc-800
-                title="切换主题"
-                @click="toggleDark()"
-              >
-                <div i-carbon-sun dark:i-carbon-moon text-lg />
-              </button>
-              <div border="1 zinc-200 dark:zinc-800" text="[9px]" text-zinc-500 font-bold px-2 py-1 rounded bg-white flex gap-1.5 items-center dark:text-zinc-400 dark:bg-zinc-900>
-                <span border="1 zinc-200 dark:zinc-700" px-1 rounded bg-zinc-100 dark:bg-zinc-800>←↑→↓</span> 移动
-              </div>
-              <div border="1 zinc-200 dark:zinc-800" text="[9px]" text-zinc-500 font-bold px-2 py-1 rounded bg-white flex gap-1.5 items-center dark:text-zinc-400 dark:bg-zinc-900>
-                <span border="1 zinc-200 dark:zinc-700" tracking-tighter px-1 rounded bg-zinc-100 dark:bg-zinc-800>Del</span> 删除
-              </div>
-            </div>
-          </div>
-
           <div bg="white dark:zinc-950/50" border="1 zinc-200 dark:zinc-800" rounded-2xl flex-1 min-h-0 shadow-sm overflow-hidden dark:shadow-inner>
             <ImageCanvas
               ref="canvasRef"
@@ -190,22 +169,44 @@ function handleLineClick(id: string) {
         </div>
       </main>
 
-      <aside border-l="zinc-200 dark:zinc-800" bg-zinc-50 flex flex-col w-80 dark:bg-zinc-950>
+      <aside border-l="zinc-200 dark:zinc-800" bg-white flex flex-col w-80 shadow-md shadow-zinc-200 dark:bg-zinc-950 dark:shadow-none>
         <div custom-scrollbar p-4 flex flex-1 flex-col gap-6 overflow-y-auto>
           <section>
             <h3 text="[10px]" text-zinc-500 tracking-wider font-bold mb-3 uppercase>
               原始图片
             </h3>
-            <UploadZone v-if="!imageSrc" @upload="handleUpload" />
-            <div v-else border="1 zinc-200 dark:zinc-800" group rounded-lg bg-white aspect-video relative overflow-hidden dark:bg-zinc-900>
-              <img :src="imageSrc" opacity-70 h-full w-full transition-opacity object-cover dark:opacity-50 group-hover="opacity-50 dark:opacity-30">
-              <div opacity-0 flex transition-opacity items-center inset-0 justify-center absolute group-hover="opacity-100">
-                <button
-                  border="1 zinc-200" text-xs text-zinc-900 font-semibold px-3 py-1.5 rounded-md bg-zinc-100 shadow-xl transition-transform dark:text-zinc-900 dark:bg-zinc-100 active:scale-95
-                  @click="handleClear"
-                >
-                  更换图片
-                </button>
+            <UploadZone @upload="handleUpload" />
+
+            <!-- Gallery switcher in index page -->
+            <div v-if="items.length > 1" custom-scrollbar mt-4 px-1 gap-2 grid grid-cols-4 max-h-48 overflow-y-auto>
+              <div
+                v-for="(item, idx) in items"
+                :key="item.id"
+                class="border-2 rounded aspect-square cursor-pointer transition-all relative overflow-hidden"
+                :class="currentIndex === idx ? 'border-emerald-500 shadow-sm' : 'border-transparent'"
+                @click="currentIndex = idx"
+              >
+                <img :src="item.processedSrc" class="h-full w-full object-cover">
+              </div>
+            </div>
+
+            <div v-if="imageSrc" border="1 zinc-200 dark:zinc-800" group mt-4 rounded-lg bg-white aspect-video relative overflow-hidden dark:bg-zinc-900>
+              <img :src="imageSrc" h-full w-full transition-opacity object-contain class="bg-checkered">
+              <div opacity-0 flex transition-opacity items-center inset-0 justify-center absolute group-hover="opacity-100 backdrop-blur-sm" bg="group-hover:zinc-900/50">
+                <div flex flex-col gap-2>
+                  <button
+                    border="1 zinc-200" text-xs text-zinc-900 font-semibold px-4 py-2 rounded-md bg-zinc-100 shadow-xl transition-transform dark:text-zinc-100 dark:bg-zinc-800 active:scale-95 hover:scale-105
+                    @click="handleClear"
+                  >
+                    更换图片
+                  </button>
+                  <RouterLink
+                    to="/prepare"
+                    border="1 emerald-500/30" text-xs text-emerald-400 font-semibold px-4 py-2 text-center rounded-md bg="emerald-500/10" shadow-xl transition-transform hover:bg="emerald-500/20" active:scale-95 hover:scale-105
+                  >
+                    去后期处理
+                  </RouterLink>
+                </div>
               </div>
             </div>
           </section>
@@ -241,7 +242,7 @@ function handleLineClick(id: string) {
                   </div>
                 </div>
                 <button
-                  bg="emerald-600/90" dark:bg="emerald-600/20" text-xs text-white font-bold py-2.5 rounded-md w-full cursor-pointer shadow-md transition-all dark:text-emerald-400 hover:bg-emerald-600 active:scale-95 dark:border="1 emerald-500/30" dark:hover:bg="emerald-600/30"
+                  bg="emerald-600/90 dark:emerald-600/20 hover:emerald-600 dark:hover:emerald-600/30" text-xs text-white font-bold py-2.5 rounded-md w-full cursor-pointer shadow-md transition-all dark:text-emerald-400 active:scale-95 dark:border="1 emerald-500/30"
                   @click="applyQuickSplit"
                 >
                   生成网格
@@ -380,7 +381,7 @@ function handleLineClick(id: string) {
 
           <button
             ref="exportButtonRef"
-            shadow="xl emerald-500/10" hover:shadow="emerald-500/20" active:scale="[0.98]"
+            shadow="xl emerald-500/10 hover:emerald-500/20" active:scale="[0.98]"
             group py-4 rounded-xl bg-emerald-600 flex gap-2 w-full cursor-pointer transition-all items-center justify-center relative overflow-hidden hover:bg-emerald-500 disabled:opacity-50
             :disabled="isExporting || splitLines.length === 0"
             @click="handleExport"
