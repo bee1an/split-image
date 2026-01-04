@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import type { SplitLine } from '../utils/splitImage'
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
+import { isDark } from '../composables/dark'
 import { clamp, generateId } from '../utils/common'
 
 defineProps<{
@@ -297,7 +298,7 @@ function draw() {
     const isHovered = line.id === hoveredLineId.value && !isSelected
 
     // Colors: selected = emerald, hovered = cyan, default = zinc
-    let strokeColor = '#a1a1aa'
+    let strokeColor = isDark.value ? '#a1a1aa' : '#52525b'
     let lineWidth = 1
 
     if (isSelected) {
@@ -309,6 +310,23 @@ function draw() {
       lineWidth = 2
     }
 
+    // Draw line shadow/glow for better contrast on complex backgrounds
+    ctx.strokeStyle = isDark.value ? 'rgba(0,0,0,0.5)' : 'rgba(255,255,255,0.5)'
+    ctx.lineWidth = lineWidth + 2
+    ctx.beginPath()
+    if (line.type === 'h') {
+      const y = (line.position / 100) * height
+      ctx.moveTo(0, y)
+      ctx.lineTo(width, y)
+    }
+    else {
+      const x = (line.position / 100) * width
+      ctx.moveTo(x, 0)
+      ctx.lineTo(x, height)
+    }
+    ctx.stroke()
+
+    // Draw main line
     ctx.strokeStyle = strokeColor
     ctx.lineWidth = lineWidth
     ctx.setLineDash([])
@@ -424,8 +442,8 @@ defineExpose({
     <canvas
       ref="canvasRef"
       :style="{ cursor: cursorStyle }"
-      rounded-sm border="1 zinc-800"
-      shadow="[0_0_50px_rgba(0,0,0,0.5)]" transition-all
+      rounded-sm border="1 zinc-200 dark:zinc-800"
+      shadow="[0_0_50px_rgba(0,0,0,0.2)] dark:shadow-[0_0_50px_rgba(0,0,0,0.5)]" transition-all
       tabindex="0"
       @mousedown="handleMouseDown"
       @mousemove="handleMouseMove"
@@ -436,11 +454,11 @@ defineExpose({
 
     <div
       v-if="displaySize.width > 0 && !selectedLineId && !creatingLine"
-      left="1/2" transform="-translate-x-1/2"
-      border="1 zinc-800" bg="zinc-950"
-      text="[10px] zinc-500" fade-in slide-in-from-bottom-2 animate-in tracking-wider font-bold px-3 py-1 rounded-full flex gap-2 uppercase shadow-2xl transition-all items-center bottom-4 absolute
+      border="1 zinc-200 dark:zinc-800" bg="white/80 dark:zinc-950/80"
+
+      text="[10px] zinc-500" fade-in slide-in-from-bottom-2 animate-in tracking-wider font-bold px-3 py-1 rounded-full flex gap-2 uppercase shadow-xl transition-all items-center bottom-4 absolute backdrop-blur-md dark:shadow-2xl
     >
-      <span i-carbon-touch-interaction text-emerald-400 />
+      <span i-carbon-touch-interaction text-emerald-500 dark:text-emerald-400 />
       从边缘拖拽开始切片
     </div>
   </div>

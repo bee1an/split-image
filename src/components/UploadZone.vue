@@ -40,8 +40,8 @@ function handleFileChange(e: Event) {
 
 <template>
   <div
-    border="1 dashed zinc-800"
-    bg="zinc-900/50" hover:border="emerald-500/50" group rounded-xl flex flex-col gap-3 h-40 w-full cursor-pointer transition-all items-center justify-center relative overflow-hidden hover:bg-zinc-900
+    border="1 dashed zinc-300 dark:zinc-800"
+    bg="zinc-50 dark:zinc-900/50" hover:border="emerald-500/50" group rounded-xl flex flex-col gap-3 h-40 w-full cursor-pointer transition-all items-center justify-center relative overflow-hidden hover:bg-zinc-100 dark:hover:bg-zinc-900
     :class="{ '!border-emerald-500 !bg-emerald-500/5': isDragging }"
     @dragover="handleDragOver"
     @dragleave="handleDragLeave"
@@ -49,14 +49,14 @@ function handleFileChange(e: Event) {
     @click="handleClick"
   >
     <div
-      border="1 zinc-700"
-      rounded-xl bg-zinc-800 flex h-12 w-12 transition-transform items-center justify-center group-hover="scale-110 bg-zinc-700"
+      border="1 zinc-200 dark:zinc-700"
+      rounded-xl bg-white flex h-12 w-12 transition-transform items-center justify-center dark:bg-zinc-800 group-hover="scale-110 bg-zinc-50 dark:bg-zinc-700"
     >
-      <span i-carbon-cloud-upload text-2xl text-zinc-400 group-hover:text-emerald-400 />
+      <span i-carbon-cloud-upload text-2xl text-zinc-400 dark:text-zinc-400 group-hover:text-emerald-400 />
     </div>
 
     <div text-center>
-      <p text="[11px] zinc-300" tracking-widest font-bold uppercase>
+      <p text="[11px] zinc-900 dark:zinc-300" tracking-widest font-bold uppercase>
         导入素材
       </p>
       <p mt-1 text="[10px] zinc-500">

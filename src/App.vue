@@ -1,7 +1,7 @@
 <template>
   <div
-    bg="slate-950"
-    text="zinc-100"
+    bg="white dark:slate-950"
+    text="zinc-900 dark:zinc-100"
     flex flex-col min-h-screen
     selection="bg-emerald-500/30"
   >
@@ -11,12 +11,16 @@
 
 <style>
 :root {
-  color-scheme: dark;
+  color-scheme: light dark;
 }
 
 body {
   margin: 0;
   overflow: hidden;
+  background: white;
+}
+
+html.dark body {
   background: #09090b;
 }
 

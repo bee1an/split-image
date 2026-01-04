@@ -2,6 +2,7 @@
 import type { ImageFormat, SplitLine } from '../utils/splitImage'
 import ImageCanvas from '../components/ImageCanvas.vue'
 import UploadZone from '../components/UploadZone.vue'
+import { isDark, toggleDark } from '../composables/dark'
 import { generateId } from '../utils/common'
 import { downloadAsZip } from '../utils/downloadZip'
 import { splitImage } from '../utils/splitImage'
@@ -117,15 +118,15 @@ function handleLineClick(id: string) {
 </script>
 
 <template>
-  <div bg="[#09090b]" flex flex-col h-screen overflow-hidden>
+  <div bg="white dark:[#09090b]" text="zinc-900 dark:zinc-100" flex flex-col h-screen overflow-hidden>
     <div flex flex-1 overflow-hidden>
-      <main flex flex-1 flex-col relative bg="[#0c0c0e]">
+      <main flex flex-1 flex-col relative bg="zinc-50 dark:[#0c0c0e]">
         <div v-if="!imageSrc" p-12 flex h-full items-center justify-center relative z-10>
           <div text-center flex flex-col max-w-sm items-center>
-            <div rounded="[2.5rem]" mb-6 bg-zinc-900 flex h-24 w-24 shadow-2xl items-center justify-center border="1 zinc-800/50">
-              <span i-carbon-image text-5xl text-zinc-700 />
+            <div rounded="[2.5rem]" mb-6 bg-white flex h-24 w-24 shadow-2xl items-center justify-center dark:bg-zinc-900 border="1 zinc-200 dark:zinc-800/50">
+              <span i-carbon-image text-5xl text-zinc-300 dark:text-zinc-700 />
             </div>
-            <h2 text-xl text-zinc-100 font-bold mb-2>
+            <h2 text-xl text-zinc-900 font-bold mb-2 dark:text-zinc-100>
               工作区为空
             </h2>
             <p text-sm text-zinc-500>
@@ -144,16 +145,32 @@ function handleLineClick(id: string) {
             </div>
 
             <div flex gap-3 items-center>
-              <div border="1 zinc-800" text="[9px]" text-zinc-400 font-bold px-2 py-1 rounded bg-zinc-900 flex gap-1.5 items-center>
-                <span border="1 zinc-700" px-1 rounded bg-zinc-800>←↑→↓</span> 移动
+              <a
+                href="https://github.com/bee1an/split-image"
+                target="_blank"
+                rel="noopener noreferrer"
+                class="text-zinc-700 p-2 rounded-md flex transition-colors dark:text-zinc-300 hover:bg-zinc-200 dark:hover:bg-zinc-800"
+                title="GitHub Repository"
+              >
+                <div i-carbon-logo-github text-lg />
+              </a>
+              <button
+                p-2 rounded-md transition-colors hover:bg-zinc-200 dark:hover:bg-zinc-800
+                title="切换主题"
+                @click="toggleDark()"
+              >
+                <div i-carbon-sun dark:i-carbon-moon text-lg />
+              </button>
+              <div border="1 zinc-200 dark:zinc-800" text="[9px]" text-zinc-500 font-bold px-2 py-1 rounded bg-white flex gap-1.5 items-center dark:text-zinc-400 dark:bg-zinc-900>
+                <span border="1 zinc-200 dark:zinc-700" px-1 rounded bg-zinc-100 dark:bg-zinc-800>←↑→↓</span> 移动
               </div>
-              <div border="1 zinc-800" text="[9px]" text-zinc-400 font-bold px-2 py-1 rounded bg-zinc-900 flex gap-1.5 items-center>
-                <span border="1 zinc-700" tracking-tighter px-1 rounded bg-zinc-800>Del</span> 删除
+              <div border="1 zinc-200 dark:zinc-800" text="[9px]" text-zinc-500 font-bold px-2 py-1 rounded bg-white flex gap-1.5 items-center dark:text-zinc-400 dark:bg-zinc-900>
+                <span border="1 zinc-200 dark:zinc-700" tracking-tighter px-1 rounded bg-zinc-100 dark:bg-zinc-800>Del</span> 删除
               </div>
             </div>
           </div>
 
-          <div bg="zinc-950/50" border="1 zinc-800" rounded-2xl flex-1 min-h-0 shadow-inner overflow-hidden>
+          <div bg="white dark:zinc-950/50" border="1 zinc-200 dark:zinc-800" rounded-2xl flex-1 min-h-0 shadow-sm overflow-hidden dark:shadow-inner>
             <ImageCanvas
               ref="canvasRef"
               v-model:lines="splitLines"
@@ -165,18 +182,18 @@ function handleLineClick(id: string) {
         </div>
       </main>
 
-      <aside border-l="zinc-800" bg-zinc-950 flex flex-col w-80>
+      <aside border-l="zinc-200 dark:zinc-800" bg-zinc-50 flex flex-col w-80 dark:bg-zinc-950>
         <div custom-scrollbar p-4 flex flex-1 flex-col gap-6 overflow-y-auto>
           <section>
             <h3 text="[10px]" text-zinc-500 tracking-wider font-bold mb-3 uppercase>
               原始图片
             </h3>
             <UploadZone v-if="!imageSrc" @upload="handleUpload" />
-            <div v-else border="1 zinc-800" group rounded-lg bg-zinc-900 aspect-video relative overflow-hidden>
-              <img :src="imageSrc" opacity-50 h-full w-full transition-opacity object-cover group-hover="opacity-30">
+            <div v-else border="1 zinc-200 dark:zinc-800" group rounded-lg bg-white aspect-video relative overflow-hidden dark:bg-zinc-900>
+              <img :src="imageSrc" opacity-70 h-full w-full transition-opacity object-cover dark:opacity-50 group-hover="opacity-50 dark:opacity-30">
               <div opacity-0 flex transition-opacity items-center inset-0 justify-center absolute group-hover="opacity-100">
                 <button
-                  text-xs text-zinc-900 font-semibold px-3 py-1.5 rounded-md bg-zinc-100 shadow-xl transition-transform active:scale-95
+                  border="1 zinc-200" text-xs text-zinc-900 font-semibold px-3 py-1.5 rounded-md bg-zinc-100 shadow-xl transition-transform dark:text-zinc-900 dark:bg-zinc-100 active:scale-95
                   @click="handleClear"
                 >
                   更换图片
@@ -186,37 +203,37 @@ function handleLineClick(id: string) {
           </section>
 
           <template v-if="imageSrc">
-            <section border="1 zinc-800" bg="zinc-900/50" p-4 rounded-xl>
+            <section border="1 zinc-200 dark:zinc-800" bg="white dark:zinc-900/50" p-4 rounded-xl shadow-sm>
               <h3 text="[10px]" text-zinc-500 tracking-wider font-bold mb-4 uppercase>
                 快速分割
               </h3>
               <div space-y-4>
                 <div gap-3 grid grid-cols-2>
                   <div space-y-1.5>
-                    <label text="[10px] zinc-400">横向线数</label>
+                    <label text="[10px] zinc-500 dark:zinc-400">横向线数</label>
                     <input
                       v-model.number="quickHLines"
                       type="number"
                       min="0"
                       max="20"
-                      border="1 zinc-700" text-xs text-zinc-100 px-2 py-1.5 outline-none rounded-md bg-zinc-800 w-full transition-colors focus:border-emerald-500
+                      border="1 zinc-200 dark:zinc-700" text-xs text-zinc-900 px-2 py-1.5 outline-none rounded-md bg-white w-full transition-colors dark:text-zinc-100 focus:border-emerald-500 dark:bg-zinc-800
                     >
-                    <span text="[9px] zinc-600">→ {{ quickHLines + 1 }} 行</span>
+                    <span text="[9px] zinc-400 dark:zinc-600">→ {{ quickHLines + 1 }} 行</span>
                   </div>
                   <div space-y-1.5>
-                    <label text="[10px] zinc-400">纵向线数</label>
+                    <label text="[10px] zinc-500 dark:zinc-400">纵向线数</label>
                     <input
                       v-model.number="quickVLines"
                       type="number"
                       min="0"
                       max="20"
-                      border="1 zinc-700" text-xs text-zinc-100 px-2 py-1.5 outline-none rounded-md bg-zinc-800 w-full transition-colors focus:border-emerald-500
+                      border="1 zinc-200 dark:zinc-700" text-xs text-zinc-900 px-2 py-1.5 outline-none rounded-md bg-white w-full transition-colors dark:text-zinc-100 focus:border-emerald-500 dark:bg-zinc-800
                     >
-                    <span text="[9px] zinc-600">→ {{ quickVLines + 1 }} 列</span>
+                    <span text="[9px] zinc-400 dark:zinc-600">→ {{ quickVLines + 1 }} 列</span>
                   </div>
                 </div>
                 <button
-                  text-xs text-zinc-950 font-bold py-2 rounded-md bg-zinc-100 w-full cursor-pointer shadow-lg transition-all hover:bg-white active:scale-95
+                  bg="emerald-600/90" dark:bg="emerald-600/20" text-xs text-white font-bold py-2.5 rounded-md w-full cursor-pointer shadow-md transition-all dark:text-emerald-400 hover:bg-emerald-600 active:scale-95 dark:border="1 emerald-500/30" dark:hover:bg="emerald-600/30"
                   @click="applyQuickSplit"
                 >
                   生成网格
@@ -229,11 +246,11 @@ function handleLineClick(id: string) {
               <div flex-1 gap-3 grid grid-cols-2 min-h-0>
                 <!-- Horizontal Lines -->
                 <div flex flex-col min-h-0>
-                  <h3 text="[10px]" text-zinc-500 tracking-wider font-bold mb-2 py-1 bg-zinc-950 flex gap-2 uppercase items-center top-0 sticky z-10>
+                  <h3 text="[10px]" text-zinc-500 tracking-wider font-bold mb-2 py-1 bg-zinc-50 flex gap-2 uppercase items-center top-0 sticky z-20 dark:bg-zinc-950>
                     <span rounded-full bg-amber-500 h-1.5 w-1.5 />
                     横向 ({{ hLineCount }})
                   </h3>
-                  <div v-if="hLines.length === 0" border="1 dashed zinc-800" py-6 rounded-lg flex items-center justify-center>
+                  <div v-if="hLines.length === 0" border="1 dashed zinc-200 dark:zinc-800" py-6 rounded-lg flex items-center justify-center>
                     <p text="[10px]" text-zinc-600>
                       无
                     </p>
@@ -242,7 +259,7 @@ function handleLineClick(id: string) {
                     <div
                       v-for="line in hLines"
                       :key="line.id"
-                      border="1 transparent" bg="zinc-900/50" group px-2 py-1.5 rounded-md flex cursor-pointer transition-all items-center justify-between
+                      border="1 transparent" bg="white dark:zinc-900/50" group px-2 py-1.5 rounded-md flex cursor-pointer shadow-sm transition-all items-center justify-between dark:shadow-none
                       :class="{
                         '!border-emerald-500/50 !bg-emerald-500/10': selectedLineId === line.id,
                         '!border-cyan-500/50 !bg-cyan-500/5': hoveredLineId === line.id && selectedLineId !== line.id,
@@ -252,7 +269,7 @@ function handleLineClick(id: string) {
                       @click="handleLineClick(line.id)"
                     >
                       <div flex gap-2 items-center>
-                        <span text="[11px] zinc-300" font-medium>
+                        <span text="[11px] zinc-600 dark:zinc-300" font-medium>
                           {{ Math.round(line.position) }}%
                         </span>
                       </div>
@@ -268,11 +285,11 @@ function handleLineClick(id: string) {
 
                 <!-- Vertical Lines -->
                 <div flex flex-col min-h-0>
-                  <h3 text="[10px]" text-zinc-500 tracking-wider font-bold mb-2 py-1 bg-zinc-950 flex gap-2 uppercase items-center top-0 sticky z-10>
+                  <h3 text="[10px]" text-zinc-500 tracking-wider font-bold mb-2 py-1 bg-zinc-50 flex gap-2 uppercase items-center top-0 sticky z-20 dark:bg-zinc-950>
                     <span rounded-full bg-emerald-500 h-1.5 w-1.5 />
                     纵向 ({{ vLineCount }})
                   </h3>
-                  <div v-if="vLines.length === 0" border="1 dashed zinc-800" py-6 rounded-lg flex items-center justify-center>
+                  <div v-if="vLines.length === 0" border="1 dashed zinc-200 dark:zinc-800" py-6 rounded-lg flex items-center justify-center>
                     <p text="[10px]" text-zinc-600>
                       无
                     </p>
@@ -281,7 +298,7 @@ function handleLineClick(id: string) {
                     <div
                       v-for="line in vLines"
                       :key="line.id"
-                      border="1 transparent" bg="zinc-900/50" group px-2 py-1.5 rounded-md flex cursor-pointer transition-all items-center justify-between
+                      border="1 transparent" bg="white dark:zinc-900/50" group px-2 py-1.5 rounded-md flex cursor-pointer shadow-sm transition-all items-center justify-between dark:shadow-none
                       :class="{
                         '!border-emerald-500/50 !bg-emerald-500/10': selectedLineId === line.id,
                         '!border-cyan-500/50 !bg-cyan-500/5': hoveredLineId === line.id && selectedLineId !== line.id,
@@ -291,7 +308,7 @@ function handleLineClick(id: string) {
                       @click="handleLineClick(line.id)"
                     >
                       <div flex gap-2 items-center>
-                        <span text="[11px] zinc-300" font-medium>
+                        <span text="[11px] zinc-600 dark:zinc-300" font-medium>
                           {{ Math.round(line.position) }}%
                         </span>
                       </div>
@@ -309,13 +326,13 @@ function handleLineClick(id: string) {
           </template>
         </div>
 
-        <div v-if="imageSrc" border-t="zinc-800" p-4 bg-zinc-950 shadow-2xl>
-          <div mb-4 p-3 rounded-lg bg-zinc-900 flex items-center justify-between>
+        <div v-if="imageSrc" border-t="zinc-200 dark:zinc-800" p-4 bg-white shadow-2xl dark:bg-zinc-950>
+          <div border="1 zinc-100 dark:zinc-800" mb-4 p-3 rounded-lg bg-zinc-50 flex items-center justify-between dark:bg-zinc-900>
             <div flex flex-col>
-              <span text="[10px] zinc-500" font-bold uppercase>输出预览</span>
-              <span text-sm text-zinc-100 font-bold>{{ pieceCount }} 张切片</span>
+              <span text="[10px] zinc-400 dark:zinc-500" font-bold uppercase>输出预览</span>
+              <span text-sm text-zinc-900 font-bold dark:text-zinc-100>{{ pieceCount }} 张切片</span>
             </div>
-            <div text-emerald-400 p-1.5 rounded-full bg-zinc-800 flex h-8 w-8 items-center justify-center>
+            <div text-emerald-600 p-1.5 rounded-full bg-white flex h-8 w-8 shadow-sm items-center justify-center dark:text-emerald-400 dark:bg-zinc-800>
               <span i-carbon-grid text-lg block />
             </div>
           </div>
@@ -323,7 +340,7 @@ function handleLineClick(id: string) {
           <!-- Export Options -->
           <div mb-4 space-y-3>
             <div>
-              <label text="[10px] zinc-400" mb-1.5 block>导出格式</label>
+              <label text="[10px] zinc-500 dark:zinc-400" mb-1.5 block>导出格式</label>
               <div flex gap-2>
                 <button
                   v-for="fmt in (['png', 'jpeg', 'webp'] as const)"
@@ -331,7 +348,7 @@ function handleLineClick(id: string) {
                   text-xs font-bold px-3 py-1.5 rounded-md cursor-pointer uppercase transition-all
                   :class="exportFormat === fmt
                     ? 'bg-emerald-600 text-white'
-                    : 'bg-zinc-800 text-zinc-400 hover:bg-zinc-700'"
+                    : 'bg-zinc-100 dark:bg-zinc-800 text-zinc-500 dark:text-zinc-400 hover:bg-zinc-200 dark:hover:bg-zinc-700'"
                   @click="exportFormat = fmt"
                 >
                   {{ fmt }}
@@ -339,7 +356,7 @@ function handleLineClick(id: string) {
               </div>
             </div>
             <div v-if="exportFormat !== 'png'">
-              <label text="[10px] zinc-400" mb-1.5 block>
+              <label text="[10px] zinc-500 dark:zinc-400" mb-1.5 block>
                 质量 ({{ Math.round(exportQuality * 100) }}%)
               </label>
               <input
@@ -359,8 +376,8 @@ function handleLineClick(id: string) {
             :disabled="isExporting || splitLines.length === 0"
             @click="handleExport"
           >
-            <span v-if="isExporting" i-carbon-rotate-360 text-xl animate-spin />
-            <span v-else i-carbon-zip text-xl />
+            <span v-if="isExporting" i-carbon-rotate-360 text-xl text-white animate-spin />
+            <span v-else i-carbon-zip text-xl text-white />
             <span text-white tracking-tight font-bold>打包下载 ZIP</span>
           </button>
         </div>
@@ -374,10 +391,10 @@ function handleLineClick(id: string) {
   width: 4px;
 }
 .custom-scrollbar::-webkit-scrollbar-thumb {
-  background: #27272a;
+  background: v-bind('isDark ? "#27272a" : "#e4e4e7"');
   border-radius: 10px;
 }
 .custom-scrollbar::-webkit-scrollbar-thumb:hover {
-  background: #3f3f46;
+  background: v-bind('isDark ? "#3f3f46" : "#d4d4d8"');
 }
 </style>
