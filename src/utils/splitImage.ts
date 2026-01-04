@@ -5,11 +5,43 @@ export interface SplitLine {
   position: number
 }
 
+export type ImageFormat = 'png' | 'jpeg' | 'webp'
+
+export interface ExportOptions {
+  format: ImageFormat
+  /** Quality for JPEG/WebP (0-1), ignored for PNG */
+  quality: number
+}
+
 interface SliceRegion {
   x: number
   y: number
   width: number
   height: number
+}
+
+/**
+ * Get MIME type from format
+ */
+function getMimeType(format: ImageFormat): string {
+  const mimeTypes: Record<ImageFormat, string> = {
+    png: 'image/png',
+    jpeg: 'image/jpeg',
+    webp: 'image/webp',
+  }
+  return mimeTypes[format]
+}
+
+/**
+ * Get file extension from format
+ */
+export function getFileExtension(format: ImageFormat): string {
+  const extensions: Record<ImageFormat, string> = {
+    png: 'png',
+    jpeg: 'jpg',
+    webp: 'webp',
+  }
+  return extensions[format]
 }
 
 /**
@@ -55,8 +87,11 @@ function calculateRegions(
 export async function splitImage(
   image: HTMLImageElement,
   lines: SplitLine[],
+  options: ExportOptions = { format: 'png', quality: 0.92 },
 ): Promise<Blob[]> {
   const regions = calculateRegions(image.naturalWidth, image.naturalHeight, lines)
+  const mimeType = getMimeType(options.format)
+  const quality = options.format === 'png' ? undefined : options.quality
 
   const blobs: Blob[] = []
 
@@ -86,7 +121,7 @@ export async function splitImage(
         if (b)
           resolve(b)
         else reject(new Error('Failed to create blob'))
-      }, 'image/png')
+      }, mimeType, quality)
     })
 
     blobs.push(blob)

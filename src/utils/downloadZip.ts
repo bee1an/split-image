@@ -1,6 +1,7 @@
-import type { SplitLine } from './splitImage'
+import type { ImageFormat, SplitLine } from './splitImage'
 import { saveAs } from 'file-saver'
 import JSZip from 'jszip'
+import { getFileExtension } from './splitImage'
 
 /**
  * Download multiple blobs as a ZIP file with proper row/column naming
@@ -9,8 +10,10 @@ export async function downloadAsZip(
   blobs: Blob[],
   baseName: string,
   lines: SplitLine[],
+  format: ImageFormat = 'png',
 ): Promise<void> {
   const zip = new JSZip()
+  const ext = getFileExtension(format)
 
   // Calculate actual grid dimensions based on lines
   const vLineCount = lines.filter(l => l.type === 'v').length
@@ -22,7 +25,7 @@ export async function downloadAsZip(
     // Pad numbers for better sorting
     const rowStr = String(row).padStart(2, '0')
     const colStr = String(col).padStart(2, '0')
-    zip.file(`${baseName}_r${rowStr}_c${colStr}.png`, blob)
+    zip.file(`${baseName}_r${rowStr}_c${colStr}.${ext}`, blob)
   })
 
   const content = await zip.generateAsync({ type: 'blob' })

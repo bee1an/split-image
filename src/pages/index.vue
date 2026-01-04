@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import type { SplitLine } from '../utils/splitImage'
+import type { ImageFormat, SplitLine } from '../utils/splitImage'
 import ImageCanvas from '../components/ImageCanvas.vue'
 import UploadZone from '../components/UploadZone.vue'
 import { generateId } from '../utils/common'
@@ -13,6 +13,10 @@ const canvasRef = ref<InstanceType<typeof ImageCanvas>>()
 
 const quickHLines = ref(0)
 const quickVLines = ref(0)
+
+// Export options
+const exportFormat = ref<ImageFormat>('png')
+const exportQuality = ref(0.92)
 
 // Line interaction state
 const selectedLineId = ref<string | null>(null)
@@ -50,8 +54,11 @@ async function handleExport() {
 
   isExporting.value = true
   try {
-    const blobs = await splitImage(image, splitLines.value)
-    await downloadAsZip(blobs, 'image', splitLines.value)
+    const blobs = await splitImage(image, splitLines.value, {
+      format: exportFormat.value,
+      quality: exportQuality.value,
+    })
+    await downloadAsZip(blobs, 'image', splitLines.value, exportFormat.value)
   }
   catch (error) {
     console.error('导出失败:', error)
@@ -306,6 +313,40 @@ function handleLineClick(id: string) {
               <span i-carbon-grid text-lg block />
             </div>
           </div>
+
+          <!-- Export Options -->
+          <div mb-4 space-y-3>
+            <div>
+              <label text="[10px] zinc-400" mb-1.5 block>导出格式</label>
+              <div flex gap-2>
+                <button
+                  v-for="fmt in (['png', 'jpeg', 'webp'] as const)"
+                  :key="fmt"
+                  text-xs font-bold px-3 py-1.5 rounded-md cursor-pointer uppercase transition-all
+                  :class="exportFormat === fmt
+                    ? 'bg-emerald-600 text-white'
+                    : 'bg-zinc-800 text-zinc-400 hover:bg-zinc-700'"
+                  @click="exportFormat = fmt"
+                >
+                  {{ fmt }}
+                </button>
+              </div>
+            </div>
+            <div v-if="exportFormat !== 'png'">
+              <label text="[10px] zinc-400" mb-1.5 block>
+                质量 ({{ Math.round(exportQuality * 100) }}%)
+              </label>
+              <input
+                v-model.number="exportQuality"
+                type="range"
+                min="0.1"
+                max="1"
+                step="0.01"
+                accent-emerald-500 w-full
+              >
+            </div>
+          </div>
+
           <button
             shadow="xl emerald-500/10" hover:shadow="emerald-500/20" active:scale="[0.98]"
             group py-4 rounded-xl bg-emerald-600 flex gap-2 w-full cursor-pointer transition-all items-center justify-center relative overflow-hidden hover:bg-emerald-500 disabled:opacity-50
