@@ -49,6 +49,7 @@ const LINE_HIT_THRESHOLD = 10
 const draggingLineId = ref<string | null>(null)
 const creatingLine = ref<{ type: 'h' | 'v', position: number } | null>(null)
 const cursorStyle = ref('default')
+const isAnimating = ref(false)
 
 function getCanvasRect() {
   return canvasRef.value?.getBoundingClientRect() ?? null
@@ -424,7 +425,170 @@ onUnmounted(() => {
 
 defineExpose({
   getImage: () => imageRef.value,
+  playExportAnimation,
+  draw,
 })
+
+// Animation: split pieces fly to target
+interface AnimatedPiece {
+  img: ImageData
+  startX: number
+  startY: number
+  width: number
+  height: number
+  progress: number
+  delay: number
+}
+
+async function playExportAnimation(targetElement: HTMLElement): Promise<void> {
+  if (isAnimating.value || !canvasRef.value || !imageRef.value)
+    return
+
+  isAnimating.value = true
+
+  const canvas = canvasRef.value
+  const image = imageRef.value
+  const { width, height } = displaySize.value
+  const canvasRect = canvas.getBoundingClientRect()
+  const targetRect = targetElement.getBoundingClientRect()
+
+  // Use viewport coordinates for target position
+  const targetX = targetRect.left + targetRect.width / 2
+  const targetY = targetRect.top + targetRect.height / 2
+
+  // Get horizontal and vertical split positions
+  const hPositions = [0, ...lines.value.filter(l => l.type === 'h').map(l => l.position).sort((a, b) => a - b), 100]
+  const vPositions = [0, ...lines.value.filter(l => l.type === 'v').map(l => l.position).sort((a, b) => a - b), 100]
+
+  // Create offscreen canvas to extract pieces
+  const offscreen = document.createElement('canvas')
+  offscreen.width = width
+  offscreen.height = height
+  const offCtx = offscreen.getContext('2d')!
+  offCtx.drawImage(image, 0, 0, width, height)
+
+  // Extract all pieces with viewport start positions
+  const pieces: AnimatedPiece[] = []
+  let pieceIndex = 0
+
+  for (let row = 0; row < hPositions.length - 1; row++) {
+    for (let col = 0; col < vPositions.length - 1; col++) {
+      const x = Math.round((vPositions[col] / 100) * width)
+      const y = Math.round((hPositions[row] / 100) * height)
+      const w = Math.round((vPositions[col + 1] / 100) * width) - x
+      const h = Math.round((hPositions[row + 1] / 100) * height) - y
+
+      if (w > 0 && h > 0) {
+        const imgData = offCtx.getImageData(x, y, w, h)
+        // Convert to viewport coordinates
+        pieces.push({
+          img: imgData,
+          startX: canvasRect.left + x,
+          startY: canvasRect.top + y,
+          width: w,
+          height: h,
+          progress: 0,
+          delay: pieceIndex * 25, // Stagger animation
+        })
+        pieceIndex++
+      }
+    }
+  }
+
+  // Create fullscreen animation layer
+  const animLayer = document.createElement('canvas')
+  animLayer.style.cssText = 'position:fixed;top:0;left:0;width:100vw;height:100vh;pointer-events:none;z-index:9999;'
+  animLayer.width = window.innerWidth
+  animLayer.height = window.innerHeight
+  document.body.appendChild(animLayer)
+
+  const animCtx = animLayer.getContext('2d')!
+  const animWidth = animLayer.width
+  const animHeight = animLayer.height
+
+  const duration = 800 // ms
+  const startTime = performance.now()
+
+  return new Promise((resolve) => {
+    function animate(currentTime: number) {
+      const elapsed = currentTime - startTime
+
+      animCtx.clearRect(0, 0, animWidth, animHeight)
+
+      let allDone = true
+
+      for (const piece of pieces) {
+        const pieceElapsed = elapsed - piece.delay
+        if (pieceElapsed < 0) {
+          allDone = false
+          // Draw piece at original position
+          const tempCanvas = document.createElement('canvas')
+          tempCanvas.width = piece.width
+          tempCanvas.height = piece.height
+          const tempCtx = tempCanvas.getContext('2d')!
+          tempCtx.putImageData(piece.img, 0, 0)
+          animCtx.drawImage(tempCanvas, piece.startX, piece.startY)
+          continue
+        }
+
+        const t = Math.min(pieceElapsed / duration, 1)
+        piece.progress = t
+
+        if (t < 1)
+          allDone = false
+
+        // Easing function (ease-in-out cubic)
+        const easeT = t < 0.5 ? 4 * t * t * t : 1 - ((-2 * t + 2) ** 3) / 2
+
+        // Linear interpolation for X
+        const currentX = piece.startX + (targetX - piece.startX - piece.width / 2) * easeT
+
+        // Linear interpolation for Y with parabolic arc
+        const baseY = piece.startY + (targetY - piece.startY - piece.height / 2) * easeT
+
+        // Parabolic arc: peaks at t=0.5, arc goes upward
+        const arcHeight = -200 * Math.sin(t * Math.PI)
+        const finalY = baseY + arcHeight
+
+        // Scale down as it approaches target
+        const scale = 1 - easeT * 0.85
+
+        // Fade out in the last 20%
+        const opacity = t > 0.8 ? 1 - (t - 0.8) / 0.2 : 1
+
+        // Draw piece
+        const tempCanvas = document.createElement('canvas')
+        tempCanvas.width = piece.width
+        tempCanvas.height = piece.height
+        const tempCtx = tempCanvas.getContext('2d')!
+        tempCtx.putImageData(piece.img, 0, 0)
+
+        animCtx.save()
+        animCtx.globalAlpha = opacity
+        animCtx.translate(currentX + (piece.width * scale) / 2, finalY + (piece.height * scale) / 2)
+        animCtx.scale(scale, scale)
+        animCtx.drawImage(tempCanvas, -piece.width / 2, -piece.height / 2)
+        animCtx.restore()
+      }
+
+      if (!allDone) {
+        requestAnimationFrame(animate)
+      }
+      else {
+        // Remove animation layer
+        document.body.removeChild(animLayer)
+        isAnimating.value = false
+        resolve()
+      }
+    }
+
+    // Hide main canvas content during animation
+    const ctx = canvas.getContext('2d')!
+    ctx.clearRect(0, 0, width, height)
+
+    requestAnimationFrame(animate)
+  })
+}
 </script>
 
 <template>
@@ -439,21 +603,24 @@ defineExpose({
       @load="handleImageLoad"
     >
 
-    <canvas
-      ref="canvasRef"
-      :style="{ cursor: cursorStyle }"
-      rounded-sm border="1 zinc-200 dark:zinc-800"
-      shadow="[0_0_50px_rgba(0,0,0,0.2)] dark:shadow-[0_0_50px_rgba(0,0,0,0.5)]" transition-all
-      tabindex="0"
-      @mousedown="handleMouseDown"
-      @mousemove="handleMouseMove"
-      @mouseup="handleMouseUp"
-      @mouseleave="handleMouseUp"
-      @dblclick="handleDoubleClick"
-    />
+    <!-- Canvas wrapper for proper overlay positioning -->
+    <div class="relative">
+      <canvas
+        ref="canvasRef"
+        :style="{ cursor: cursorStyle }"
+        rounded-sm border="1 zinc-200 dark:zinc-800"
+        shadow="[0_0_50px_rgba(0,0,0,0.2)] dark:shadow-[0_0_50px_rgba(0,0,0,0.5)]" transition-all
+        tabindex="0"
+        @mousedown="handleMouseDown"
+        @mousemove="handleMouseMove"
+        @mouseup="handleMouseUp"
+        @mouseleave="handleMouseUp"
+        @dblclick="handleDoubleClick"
+      />
+    </div>
 
     <div
-      v-if="displaySize.width > 0 && !selectedLineId && !creatingLine"
+      v-if="displaySize.width > 0 && !selectedLineId && !creatingLine && !isAnimating"
       border="1 zinc-200 dark:zinc-800" bg="white/80 dark:zinc-950/80"
 
       text="[10px] zinc-500" fade-in slide-in-from-bottom-2 animate-in tracking-wider font-bold px-3 py-1 rounded-full flex gap-2 uppercase shadow-xl transition-all items-center bottom-4 absolute backdrop-blur-md dark:shadow-2xl

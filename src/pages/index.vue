@@ -11,6 +11,7 @@ const imageSrc = ref<string>('')
 const splitLines = ref<SplitLine[]>([])
 const isExporting = ref(false)
 const canvasRef = ref<InstanceType<typeof ImageCanvas>>()
+const exportButtonRef = ref<HTMLButtonElement>()
 
 const quickHLines = ref(0)
 const quickVLines = ref(0)
@@ -55,6 +56,11 @@ async function handleExport() {
 
   isExporting.value = true
   try {
+    // Play animation before export
+    if (exportButtonRef.value && canvasRef.value?.playExportAnimation) {
+      await canvasRef.value.playExportAnimation(exportButtonRef.value)
+    }
+
     const blobs = await splitImage(image, splitLines.value, {
       format: exportFormat.value,
       quality: exportQuality.value,
@@ -66,6 +72,8 @@ async function handleExport() {
   }
   finally {
     isExporting.value = false
+    // Redraw canvas after animation
+    canvasRef.value?.draw()
   }
 }
 
@@ -371,6 +379,7 @@ function handleLineClick(id: string) {
           </div>
 
           <button
+            ref="exportButtonRef"
             shadow="xl emerald-500/10" hover:shadow="emerald-500/20" active:scale="[0.98]"
             group py-4 rounded-xl bg-emerald-600 flex gap-2 w-full cursor-pointer transition-all items-center justify-center relative overflow-hidden hover:bg-emerald-500 disabled:opacity-50
             :disabled="isExporting || splitLines.length === 0"
