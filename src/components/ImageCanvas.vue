@@ -1,0 +1,429 @@
+<script setup lang="ts">
+import type { SplitLine } from '../utils/splitImage'
+import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
+import { clamp, generateId } from '../utils/common'
+
+defineProps<{
+  imageSrc: string
+}>()
+
+const emit = defineEmits<{
+  'update:lines': [lines: SplitLine[]]
+}>()
+
+const lines = defineModel<SplitLine[]>('lines', { default: () => [] })
+
+const containerRef = ref<HTMLDivElement>()
+const canvasRef = ref<HTMLCanvasElement>()
+const imageRef = ref<HTMLImageElement>()
+
+const containerSize = ref({ width: 0, height: 0 })
+const imageNaturalSize = ref({ width: 0, height: 0 })
+
+const displaySize = computed(() => {
+  const { width: natW, height: natH } = imageNaturalSize.value
+  const { width: contW, height: contH } = containerSize.value
+
+  if (!natW || !natH || !contW || !contH) {
+    return { width: 0, height: 0 }
+  }
+
+  const ratioW = contW / natW
+  const ratioH = contH / natH
+  const ratio = Math.min(ratioW, ratioH, 1)
+
+  return {
+    width: Math.floor(natW * ratio),
+    height: Math.floor(natH * ratio),
+  }
+})
+
+const EDGE_THRESHOLD = 24
+const LINE_HIT_THRESHOLD = 10
+
+const draggingLineId = ref<string | null>(null)
+const creatingLine = ref<{ type: 'h' | 'v', position: number } | null>(null)
+const selectedLineId = ref<string | null>(null)
+const cursorStyle = ref('default')
+
+function getCanvasRect() {
+  return canvasRef.value?.getBoundingClientRect() ?? null
+}
+
+function getMousePosition(e: MouseEvent): { x: number, y: number, xPercent: number, yPercent: number } {
+  const rect = getCanvasRect()
+  if (!rect)
+    return { x: 0, y: 0, xPercent: 0, yPercent: 0 }
+
+  const x = e.clientX - rect.left
+  const y = e.clientY - rect.top
+
+  const xPercent = rect.width > 0 ? (x / rect.width) * 100 : 0
+  const yPercent = rect.height > 0 ? (y / rect.height) * 100 : 0
+
+  return { x, y, xPercent, yPercent }
+}
+
+function isNearEdge(pos: { x: number, y: number }): 'left' | 'right' | 'top' | 'bottom' | null {
+  const rect = getCanvasRect()
+  if (!rect)
+    return null
+
+  const { width, height } = rect
+
+  if (pos.x < 0 || pos.x > width || pos.y < 0 || pos.y > height) {
+    return null
+  }
+  if (pos.x <= EDGE_THRESHOLD)
+    return 'left'
+  if (pos.x >= width - EDGE_THRESHOLD)
+    return 'right'
+  if (pos.y <= EDGE_THRESHOLD)
+    return 'top'
+  if (pos.y >= height - EDGE_THRESHOLD)
+    return 'bottom'
+  return null
+}
+
+function findLineAtPosition(pos: { x: number, y: number }): SplitLine | null {
+  const rect = getCanvasRect()
+  if (!rect)
+    return null
+
+  const { width, height } = rect
+
+  for (const line of lines.value) {
+    if (line.type === 'h') {
+      const lineY = (line.position / 100) * height
+      if (Math.abs(pos.y - lineY) <= LINE_HIT_THRESHOLD) {
+        return line
+      }
+    }
+    else {
+      const lineX = (line.position / 100) * width
+      if (Math.abs(pos.x - lineX) <= LINE_HIT_THRESHOLD) {
+        return line
+      }
+    }
+  }
+  return null
+}
+
+function updateLines(newLines: SplitLine[]) {
+  lines.value = newLines
+  emit('update:lines', newLines)
+}
+
+function handleMouseDown(e: MouseEvent) {
+  const pos = getMousePosition(e)
+  const edge = isNearEdge(pos)
+
+  const hitLine = findLineAtPosition(pos)
+  if (hitLine) {
+    draggingLineId.value = hitLine.id
+    selectedLineId.value = hitLine.id
+    draw()
+    return
+  }
+
+  selectedLineId.value = null
+
+  if (edge === 'left' || edge === 'right') {
+    creatingLine.value = { type: 'v', position: pos.xPercent }
+  }
+  else if (edge === 'top' || edge === 'bottom') {
+    creatingLine.value = { type: 'h', position: pos.yPercent }
+  }
+}
+
+function handleMouseMove(e: MouseEvent) {
+  const pos = getMousePosition(e)
+  const edge = isNearEdge(pos)
+  const hitLine = findLineAtPosition(pos)
+
+  if (draggingLineId.value) {
+    const line = lines.value.find(l => l.id === draggingLineId.value)
+    if (line) {
+      const newPosition = line.type === 'h' ? pos.yPercent : pos.xPercent
+      line.position = clamp(newPosition, 0, 100)
+      updateLines([...lines.value])
+      draw()
+      cursorStyle.value = line.type === 'h' ? 'row-resize' : 'col-resize'
+    }
+  }
+  else if (creatingLine.value) {
+    creatingLine.value.position = creatingLine.value.type === 'h' ? pos.yPercent : pos.xPercent
+    draw()
+    cursorStyle.value = creatingLine.value.type === 'h' ? 'row-resize' : 'col-resize'
+  }
+  else if (hitLine) {
+    cursorStyle.value = hitLine.type === 'h' ? 'row-resize' : 'col-resize'
+  }
+  else if (edge === 'left' || edge === 'right') {
+    cursorStyle.value = 'col-resize'
+  }
+  else if (edge === 'top' || edge === 'bottom') {
+    cursorStyle.value = 'row-resize'
+  }
+  else {
+    cursorStyle.value = 'default'
+  }
+}
+
+function handleMouseUp() {
+  if (creatingLine.value) {
+    const pos = creatingLine.value.position
+    if (pos > 1 && pos < 99) {
+      const newLine: SplitLine = {
+        id: generateId(),
+        type: creatingLine.value.type,
+        position: pos,
+      }
+      const newLines = [...lines.value, newLine]
+      selectedLineId.value = newLine.id
+      updateLines(newLines)
+    }
+  }
+  creatingLine.value = null
+  draggingLineId.value = null
+  draw()
+}
+
+function handleDoubleClick(e: MouseEvent) {
+  const pos = getMousePosition(e)
+  const hitLine = findLineAtPosition(pos)
+  if (hitLine) {
+    const newLines = lines.value.filter(l => l.id !== hitLine.id)
+    if (selectedLineId.value === hitLine.id) {
+      selectedLineId.value = null
+    }
+    updateLines(newLines)
+    draw()
+  }
+}
+
+function handleKeyDown(e: KeyboardEvent) {
+  // Ignore if focus is on an input element
+  if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) {
+    return
+  }
+
+  if (!selectedLineId.value)
+    return
+
+  const line = lines.value.find(l => l.id === selectedLineId.value)
+  if (!line)
+    return
+
+  const { width, height } = displaySize.value
+  if (!width || !height)
+    return
+
+  const pixelStepH = (1 / height) * 100
+  const pixelStepV = (1 / width) * 100
+
+  let moved = false
+
+  if (line.type === 'h') {
+    if (e.key === 'ArrowUp') {
+      line.position = clamp(line.position - pixelStepH, 0, 100)
+      moved = true
+    }
+    else if (e.key === 'ArrowDown') {
+      line.position = clamp(line.position + pixelStepH, 0, 100)
+      moved = true
+    }
+  }
+  else {
+    if (e.key === 'ArrowLeft') {
+      line.position = clamp(line.position - pixelStepV, 0, 100)
+      moved = true
+    }
+    else if (e.key === 'ArrowRight') {
+      line.position = clamp(line.position + pixelStepV, 0, 100)
+      moved = true
+    }
+  }
+
+  if (e.key === 'Delete' || e.key === 'Backspace') {
+    const newLines = lines.value.filter(l => l.id !== selectedLineId.value)
+    selectedLineId.value = null
+    updateLines(newLines)
+    draw()
+    e.preventDefault()
+    return
+  }
+
+  // Escape to deselect
+  if (e.key === 'Escape') {
+    selectedLineId.value = null
+    draw()
+    return
+  }
+
+  if (moved) {
+    updateLines([...lines.value])
+    draw()
+    e.preventDefault()
+  }
+}
+
+function draw() {
+  const canvas = canvasRef.value
+  const image = imageRef.value
+  if (!canvas || !image)
+    return
+
+  const ctx = canvas.getContext('2d')
+  if (!ctx)
+    return
+
+  const { width, height } = displaySize.value
+  canvas.width = width
+  canvas.height = height
+
+  ctx.clearRect(0, 0, width, height)
+  ctx.drawImage(image, 0, 0, width, height)
+
+  // Draw existing lines
+  for (const line of lines.value) {
+    const isSelected = line.id === selectedLineId.value
+    ctx.strokeStyle = isSelected ? '#f472b6' : '#22d3ee'
+    ctx.lineWidth = isSelected ? 2 : 1
+    ctx.setLineDash([])
+
+    ctx.beginPath()
+    if (line.type === 'h') {
+      const y = (line.position / 100) * height
+      ctx.moveTo(0, y)
+      ctx.lineTo(width, y)
+    }
+    else {
+      const x = (line.position / 100) * width
+      ctx.moveTo(x, 0)
+      ctx.lineTo(x, height)
+    }
+    ctx.stroke()
+  }
+
+  // Draw creating line preview
+  if (creatingLine.value) {
+    ctx.strokeStyle = '#e879f9'
+    ctx.lineWidth = 1
+    ctx.setLineDash([8, 6])
+
+    ctx.beginPath()
+    if (creatingLine.value.type === 'h') {
+      const y = (creatingLine.value.position / 100) * height
+      ctx.moveTo(0, y)
+      ctx.lineTo(width, y)
+    }
+    else {
+      const x = (creatingLine.value.position / 100) * width
+      ctx.moveTo(x, 0)
+      ctx.lineTo(x, height)
+    }
+    ctx.stroke()
+    ctx.setLineDash([])
+  }
+}
+
+function updateContainerSize() {
+  if (containerRef.value) {
+    containerSize.value = {
+      width: containerRef.value.clientWidth,
+      height: containerRef.value.clientHeight,
+    }
+  }
+}
+
+function handleImageLoad() {
+  if (imageRef.value) {
+    imageNaturalSize.value = {
+      width: imageRef.value.naturalWidth,
+      height: imageRef.value.naturalHeight,
+    }
+    draw()
+  }
+}
+
+watch([displaySize, lines], () => {
+  draw()
+})
+
+onMounted(() => {
+  updateContainerSize()
+  window.addEventListener('resize', updateContainerSize)
+  window.addEventListener('keydown', handleKeyDown)
+})
+
+onUnmounted(() => {
+  window.removeEventListener('resize', updateContainerSize)
+  window.removeEventListener('keydown', handleKeyDown)
+})
+
+defineExpose({
+  getImage: () => imageRef.value,
+})
+</script>
+
+<template>
+  <div
+    ref="containerRef"
+    bg="slate-900/50"
+    rounded-2xl flex h-full w-full items-center justify-center relative overflow-hidden
+  >
+    <img
+      ref="imageRef"
+      :src="imageSrc"
+      hidden
+      @load="handleImageLoad"
+    >
+
+    <canvas
+      ref="canvasRef"
+      :style="{ cursor: cursorStyle }"
+      rounded-xl
+      shadow="2xl black/50"
+      tabindex="0"
+      @mousedown="handleMouseDown"
+      @mousemove="handleMouseMove"
+      @mouseup="handleMouseUp"
+      @mouseleave="handleMouseUp"
+      @dblclick="handleDoubleClick"
+    />
+
+    <!-- Edge hint -->
+    <div
+      v-if="displaySize.width > 0"
+      left="1/2"
+      transform="-translate-x-1/2"
+      bg="slate-800/80"
+      border="1 slate-700/50"
+      text-xs text-slate-400 px-4 py-2 rounded-full flex gap-2 pointer-events-none items-center top-4 absolute backdrop-blur-sm
+    >
+      <span i-carbon-arrow-down text-cyan-400 />
+      Drag from edge • Click to select • Arrows/Del to edit
+    </div>
+
+    <!-- Line count badge -->
+    <div
+      v-if="lines.length > 0"
+      bg="cyan-500/20"
+      border="1 cyan-500/30"
+      text-sm text-cyan-400 font-medium px-3 py-1.5 rounded-full pointer-events-none bottom-4 right-4 absolute backdrop-blur-sm
+    >
+      {{ lines.length }} line{{ lines.length > 1 ? 's' : '' }}
+    </div>
+
+    <!-- Selected line indicator -->
+    <div
+      v-if="selectedLineId"
+      bg="fuchsia-500/20"
+      border="1 fuchsia-500/30"
+      text-sm text-fuchsia-400 font-medium px-3 py-1.5 rounded-full pointer-events-none bottom-4 left-4 absolute backdrop-blur-sm
+    >
+      ↑↓←→ Move • Del remove • Esc deselect
+    </div>
+  </div>
+</template>

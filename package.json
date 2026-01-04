@@ -14,12 +14,16 @@
   },
   "dependencies": {
     "@vueuse/core": "catalog:frontend",
+    "file-saver": "catalog:",
+    "jszip": "catalog:",
+    "roughjs": "catalog:",
     "vue": "catalog:frontend",
     "vue-router": "catalog:frontend"
   },
   "devDependencies": {
     "@antfu/eslint-config": "catalog:dev",
     "@iconify-json/carbon": "catalog:build",
+    "@types/file-saver": "catalog:",
     "@types/node": "catalog:dev",
     "@unocss/eslint-plugin": "catalog:dev",
     "@vitejs/plugin-vue": "catalog:build",

@@ -1,5 +1,5 @@
 <template>
-  <main font-sans p="x-4 y-10" text="center gray-700 dark:gray-200">
+  <div bg-gradient-to-br flex flex-col min-h-screen from-slate-900 to-slate-900 via-slate-800>
     <RouterView />
-  </main>
+  </div>
 </template>

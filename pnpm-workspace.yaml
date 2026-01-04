@@ -1,4 +1,9 @@
 packages: []
+catalog:
+  '@types/file-saver': ^2.0.7
+  file-saver: ^2.0.5
+  jszip: ^3.10.1
+  roughjs: ^4.6.6
 catalogs:
   build:
     '@iconify-json/carbon': ^1.2.9
