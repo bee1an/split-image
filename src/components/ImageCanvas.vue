@@ -1,6 +1,5 @@
 <script setup lang="ts">
 import type { SplitLine } from '../utils/splitImage'
-import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { clamp, generateId } from '../utils/common'
 
 defineProps<{
@@ -28,8 +27,8 @@ const displaySize = computed(() => {
     return { width: 0, height: 0 }
   }
 
-  const ratioW = contW / natW
-  const ratioH = contH / natH
+  const ratioW = (contW - 64) / natW
+  const ratioH = (contH - 64) / natH
   const ratio = Math.min(ratioW, ratioH, 1)
 
   return {
@@ -203,7 +202,6 @@ function handleDoubleClick(e: MouseEvent) {
 }
 
 function handleKeyDown(e: KeyboardEvent) {
-  // Ignore if focus is on an input element
   if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) {
     return
   }
@@ -254,7 +252,6 @@ function handleKeyDown(e: KeyboardEvent) {
     return
   }
 
-  // Escape to deselect
   if (e.key === 'Escape') {
     selectedLineId.value = null
     draw()
@@ -285,10 +282,9 @@ function draw() {
   ctx.clearRect(0, 0, width, height)
   ctx.drawImage(image, 0, 0, width, height)
 
-  // Draw existing lines
   for (const line of lines.value) {
     const isSelected = line.id === selectedLineId.value
-    ctx.strokeStyle = isSelected ? '#f472b6' : '#22d3ee'
+    ctx.strokeStyle = isSelected ? '#10b981' : '#a1a1aa'
     ctx.lineWidth = isSelected ? 2 : 1
     ctx.setLineDash([])
 
@@ -304,13 +300,34 @@ function draw() {
       ctx.lineTo(x, height)
     }
     ctx.stroke()
+
+    if (isSelected) {
+      ctx.fillStyle = '#10b981'
+      if (line.type === 'h') {
+        const y = (line.position / 100) * height
+        ctx.beginPath()
+        ctx.arc(2, y, 3, 0, Math.PI * 2)
+        ctx.fill()
+        ctx.beginPath()
+        ctx.arc(width - 2, y, 3, 0, Math.PI * 2)
+        ctx.fill()
+      }
+      else {
+        const x = (line.position / 100) * width
+        ctx.beginPath()
+        ctx.arc(x, 2, 3, 0, Math.PI * 2)
+        ctx.fill()
+        ctx.beginPath()
+        ctx.arc(x, height - 2, 3, 0, Math.PI * 2)
+        ctx.fill()
+      }
+    }
   }
 
-  // Draw creating line preview
   if (creatingLine.value) {
-    ctx.strokeStyle = '#e879f9'
+    ctx.strokeStyle = '#10b981'
     ctx.lineWidth = 1
-    ctx.setLineDash([8, 6])
+    ctx.setLineDash([4, 4])
 
     ctx.beginPath()
     if (creatingLine.value.type === 'h') {
@@ -370,8 +387,7 @@ defineExpose({
 <template>
   <div
     ref="containerRef"
-    bg="slate-900/50"
-    rounded-2xl flex h-full w-full items-center justify-center relative overflow-hidden
+    p-8 flex h-full w-full transition-colors duration-500 items-center justify-center relative
   >
     <img
       ref="imageRef"
@@ -383,8 +399,8 @@ defineExpose({
     <canvas
       ref="canvasRef"
       :style="{ cursor: cursorStyle }"
-      rounded-xl
-      shadow="2xl black/50"
+      rounded-sm border="1 zinc-800"
+      shadow="[0_0_50px_rgba(0,0,0,0.5)]" transition-all
       tabindex="0"
       @mousedown="handleMouseDown"
       @mousemove="handleMouseMove"
@@ -393,37 +409,14 @@ defineExpose({
       @dblclick="handleDoubleClick"
     />
 
-    <!-- Edge hint -->
     <div
-      v-if="displaySize.width > 0"
-      left="1/2"
-      transform="-translate-x-1/2"
-      bg="slate-800/80"
-      border="1 slate-700/50"
-      text-xs text-slate-400 px-4 py-2 rounded-full flex gap-2 pointer-events-none items-center top-4 absolute backdrop-blur-sm
+      v-if="displaySize.width > 0 && !selectedLineId && !creatingLine"
+      left="1/2" transform="-translate-x-1/2"
+      border="1 zinc-800" bg="zinc-950"
+      text="[10px] zinc-500" fade-in slide-in-from-bottom-2 animate-in tracking-wider font-bold px-3 py-1 rounded-full flex gap-2 uppercase shadow-2xl transition-all items-center bottom-4 absolute
     >
-      <span i-carbon-arrow-down text-cyan-400 />
-      Drag from edge • Click to select • Arrows/Del to edit
-    </div>
-
-    <!-- Line count badge -->
-    <div
-      v-if="lines.length > 0"
-      bg="cyan-500/20"
-      border="1 cyan-500/30"
-      text-sm text-cyan-400 font-medium px-3 py-1.5 rounded-full pointer-events-none bottom-4 right-4 absolute backdrop-blur-sm
-    >
-      {{ lines.length }} line{{ lines.length > 1 ? 's' : '' }}
-    </div>
-
-    <!-- Selected line indicator -->
-    <div
-      v-if="selectedLineId"
-      bg="fuchsia-500/20"
-      border="1 fuchsia-500/30"
-      text-sm text-fuchsia-400 font-medium px-3 py-1.5 rounded-full pointer-events-none bottom-4 left-4 absolute backdrop-blur-sm
-    >
-      ↑↓←→ Move • Del remove • Esc deselect
+      <span i-carbon-touch-interaction text-emerald-400 />
+      从边缘拖拽开始切片
     </div>
   </div>
 </template>
