@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import type { SplitLine } from '../utils/splitImage'
+import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { clamp, generateId } from '../utils/common'
 
 defineProps<{
@@ -8,9 +9,13 @@ defineProps<{
 
 const emit = defineEmits<{
   'update:lines': [lines: SplitLine[]]
+  'update:selectedLineId': [id: string | null]
+  'update:hoveredLineId': [id: string | null]
 }>()
 
 const lines = defineModel<SplitLine[]>('lines', { default: () => [] })
+const selectedLineId = defineModel<string | null>('selectedLineId', { default: null })
+const hoveredLineId = defineModel<string | null>('hoveredLineId', { default: null })
 
 const containerRef = ref<HTMLDivElement>()
 const canvasRef = ref<HTMLCanvasElement>()
@@ -42,7 +47,6 @@ const LINE_HIT_THRESHOLD = 10
 
 const draggingLineId = ref<string | null>(null)
 const creatingLine = ref<{ type: 'h' | 'v', position: number } | null>(null)
-const selectedLineId = ref<string | null>(null)
 const cursorStyle = ref('default')
 
 function getCanvasRect() {
@@ -121,11 +125,13 @@ function handleMouseDown(e: MouseEvent) {
   if (hitLine) {
     draggingLineId.value = hitLine.id
     selectedLineId.value = hitLine.id
+    emit('update:selectedLineId', hitLine.id)
     draw()
     return
   }
 
   selectedLineId.value = null
+  emit('update:selectedLineId', null)
 
   if (edge === 'left' || edge === 'right') {
     creatingLine.value = { type: 'v', position: pos.xPercent }
@@ -180,6 +186,7 @@ function handleMouseUp() {
       }
       const newLines = [...lines.value, newLine]
       selectedLineId.value = newLine.id
+      emit('update:selectedLineId', newLine.id)
       updateLines(newLines)
     }
   }
@@ -195,6 +202,7 @@ function handleDoubleClick(e: MouseEvent) {
     const newLines = lines.value.filter(l => l.id !== hitLine.id)
     if (selectedLineId.value === hitLine.id) {
       selectedLineId.value = null
+      emit('update:selectedLineId', null)
     }
     updateLines(newLines)
     draw()
@@ -246,6 +254,7 @@ function handleKeyDown(e: KeyboardEvent) {
   if (e.key === 'Delete' || e.key === 'Backspace') {
     const newLines = lines.value.filter(l => l.id !== selectedLineId.value)
     selectedLineId.value = null
+    emit('update:selectedLineId', null)
     updateLines(newLines)
     draw()
     e.preventDefault()
@@ -254,6 +263,7 @@ function handleKeyDown(e: KeyboardEvent) {
 
   if (e.key === 'Escape') {
     selectedLineId.value = null
+    emit('update:selectedLineId', null)
     draw()
     return
   }
@@ -284,8 +294,23 @@ function draw() {
 
   for (const line of lines.value) {
     const isSelected = line.id === selectedLineId.value
-    ctx.strokeStyle = isSelected ? '#10b981' : '#a1a1aa'
-    ctx.lineWidth = isSelected ? 2 : 1
+    const isHovered = line.id === hoveredLineId.value && !isSelected
+
+    // Colors: selected = emerald, hovered = cyan, default = zinc
+    let strokeColor = '#a1a1aa'
+    let lineWidth = 1
+
+    if (isSelected) {
+      strokeColor = '#10b981'
+      lineWidth = 2
+    }
+    else if (isHovered) {
+      strokeColor = '#22d3ee'
+      lineWidth = 2
+    }
+
+    ctx.strokeStyle = strokeColor
+    ctx.lineWidth = lineWidth
     ctx.setLineDash([])
 
     ctx.beginPath()
@@ -301,8 +326,8 @@ function draw() {
     }
     ctx.stroke()
 
-    if (isSelected) {
-      ctx.fillStyle = '#10b981'
+    if (isSelected || isHovered) {
+      ctx.fillStyle = strokeColor
       if (line.type === 'h') {
         const y = (line.position / 100) * height
         ctx.beginPath()
@@ -364,7 +389,7 @@ function handleImageLoad() {
   }
 }
 
-watch([displaySize, lines], () => {
+watch([displaySize, lines, selectedLineId, hoveredLineId], () => {
   draw()
 })
 

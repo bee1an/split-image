@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import type { SplitLine } from '../utils/splitImage'
 import ImageCanvas from '../components/ImageCanvas.vue'
+import UploadZone from '../components/UploadZone.vue'
 import { generateId } from '../utils/common'
 import { downloadAsZip } from '../utils/downloadZip'
 import { splitImage } from '../utils/splitImage'
@@ -13,6 +14,22 @@ const canvasRef = ref<InstanceType<typeof ImageCanvas>>()
 const quickHLines = ref(0)
 const quickVLines = ref(0)
 
+// Line interaction state
+const selectedLineId = ref<string | null>(null)
+const hoveredLineId = ref<string | null>(null)
+
+// Computed lists for horizontal and vertical lines
+const hLines = computed(() =>
+  splitLines.value
+    .filter(l => l.type === 'h')
+    .sort((a, b) => a.position - b.position),
+)
+const vLines = computed(() =>
+  splitLines.value
+    .filter(l => l.type === 'v')
+    .sort((a, b) => a.position - b.position),
+)
+
 function handleUpload(file: File) {
   const reader = new FileReader()
   reader.onload = (e) => {
@@ -20,6 +37,8 @@ function handleUpload(file: File) {
     splitLines.value = []
     quickHLines.value = 0
     quickVLines.value = 0
+    selectedLineId.value = null
+    hoveredLineId.value = null
   }
   reader.readAsDataURL(file)
 }
@@ -47,6 +66,8 @@ function handleClear() {
   splitLines.value = []
   quickHLines.value = 0
   quickVLines.value = 0
+  selectedLineId.value = null
+  hoveredLineId.value = null
 }
 
 function applyQuickSplit() {
@@ -62,14 +83,29 @@ function applyQuickSplit() {
     newLines.push({ id: generateId(), type: 'v', position })
   }
   splitLines.value = newLines
+  selectedLineId.value = null
 }
 
-const hLineCount = computed(() => splitLines.value.filter(l => l.type === 'h').length)
-const vLineCount = computed(() => splitLines.value.filter(l => l.type === 'v').length)
+const hLineCount = computed(() => hLines.value.length)
+const vLineCount = computed(() => vLines.value.length)
 const pieceCount = computed(() => (hLineCount.value + 1) * (vLineCount.value + 1))
 
 function removeLine(id: string) {
   splitLines.value = splitLines.value.filter(l => l.id !== id)
+  if (selectedLineId.value === id) {
+    selectedLineId.value = null
+  }
+  if (hoveredLineId.value === id) {
+    hoveredLineId.value = null
+  }
+}
+
+function handleLineHover(id: string | null) {
+  hoveredLineId.value = id
+}
+
+function handleLineClick(id: string) {
+  selectedLineId.value = id
 }
 </script>
 
@@ -77,8 +113,6 @@ function removeLine(id: string) {
   <div bg="[#09090b]" flex flex-col h-screen overflow-hidden>
     <div flex flex-1 overflow-hidden>
       <main flex flex-1 flex-col relative bg="[#0c0c0e]">
-        <!-- <div inset-0 absolute z-0 opacity="[0.03]" style="background-image: radial-gradient(#fff 1px, transparent 1px); background-size: 24px 24px;" /> -->
-
         <div v-if="!imageSrc" p-12 flex h-full items-center justify-center relative z-10>
           <div text-center flex flex-col max-w-sm items-center>
             <div rounded="[2.5rem]" mb-6 bg-zinc-900 flex h-24 w-24 shadow-2xl items-center justify-center border="1 zinc-800/50">
@@ -88,18 +122,25 @@ function removeLine(id: string) {
               工作区为空
             </h2>
             <p text-sm text-zinc-500>
-              从左侧侧边栏导入素材。然后你可以从图片边缘向内拖拽，精准创建切片分界线。
+              从右侧侧边栏导入素材。然后你可以从图片边缘向内拖拽，精准创建切片分界线。
             </p>
           </div>
         </div>
 
         <div v-else p-8 flex flex-col h-full relative z-10 overflow-hidden>
-          <div mb-4 flex items-center>
+          <div mb-4 flex items-center justify-between>
+            <div text="[10px]" text-zinc-500 tracking-widest font-bold flex gap-2 uppercase items-center>
+              <span i-carbon-workspace />
+              工作台
+              <span i-carbon-chevron-right text="[8px]" />
+              <span text-emerald-400>active_session</span>
+            </div>
+
             <div flex gap-3 items-center>
-              <div text="[9px]" text-zinc-400 font-bold px-2 py-1 rounded bg-zinc-900 flex gap-1.5 items-center border="1 zinc-800">
-                <span px-1 rounded bg-zinc-800 border="1 zinc-700">←↑→↓</span> 移动
+              <div border="1 zinc-800" text="[9px]" text-zinc-400 font-bold px-2 py-1 rounded bg-zinc-900 flex gap-1.5 items-center>
+                <span border="1 zinc-700" px-1 rounded bg-zinc-800>←↑→↓</span> 移动
               </div>
-              <div text="[9px]" text-zinc-400 font-bold px-2 py-1 rounded bg-zinc-900 flex gap-1.5 items-center border="1 zinc-800">
+              <div border="1 zinc-800" text="[9px]" text-zinc-400 font-bold px-2 py-1 rounded bg-zinc-900 flex gap-1.5 items-center>
                 <span border="1 zinc-700" tracking-tighter px-1 rounded bg-zinc-800>Del</span> 删除
               </div>
             </div>
@@ -109,13 +150,15 @@ function removeLine(id: string) {
             <ImageCanvas
               ref="canvasRef"
               v-model:lines="splitLines"
+              v-model:selected-line-id="selectedLineId"
+              v-model:hovered-line-id="hoveredLineId"
               :image-src="imageSrc"
             />
           </div>
         </div>
       </main>
 
-      <aside border-r="zinc-800" bg-zinc-950 flex flex-col w-64>
+      <aside border-l="zinc-800" bg-zinc-950 flex flex-col w-72>
         <div custom-scrollbar p-4 flex flex-1 flex-col gap-6 overflow-y-auto>
           <section>
             <h3 text="[10px]" text-zinc-500 tracking-wider font-bold mb-3 uppercase>
@@ -168,36 +211,85 @@ function removeLine(id: string) {
               </div>
             </section>
 
-            <section flex flex-1 flex-col min-h-0>
-              <h3 text="[10px]" text-zinc-500 tracking-wider font-bold mb-3 uppercase>
-                切片点 ({{ splitLines.length }})
-              </h3>
-              <div v-if="splitLines.length === 0" border="1 dashed zinc-800" py-8 rounded-lg flex flex-1 items-center justify-center>
-                <p text-xs text-zinc-600>
-                  尚未添加分界线
-                </p>
-              </div>
-              <div v-else custom-scrollbar pr-2 flex-1 overflow-y-auto space-y-1>
-                <div
-                  v-for="line in [...splitLines].sort((a, b) => a.position - b.position)"
-                  :key="line.id"
-                  border="1 transparent" bg="zinc-900/50" group px-2 py-1.5 rounded-md flex transition-colors items-center justify-between hover:border-zinc-700 hover:bg-zinc-800
-                >
-                  <div flex gap-2 items-center>
-                    <span
-                      rounded-full h-1.5 w-1.5
-                      :class="line.type === 'h' ? 'bg-amber-500' : 'bg-emerald-500'"
-                    />
-                    <span text="[11px] zinc-300" font-medium>
-                      {{ line.type === 'h' ? '横向' : '纵向' }} @ {{ Math.round(line.position) }}%
-                    </span>
-                  </div>
-                  <button
-                    group-hover="opacity-100" text-zinc-500 opacity-0 transition-opacity hover:text-red-400
-                    @click="removeLine(line.id)"
+            <!-- Split Lines Section - Separated by type -->
+            <section flex flex-1 flex-col gap-4 min-h-0>
+              <!-- Horizontal Lines -->
+              <div>
+                <h3 text="[10px]" text-zinc-500 tracking-wider font-bold mb-2 flex gap-2 uppercase items-center>
+                  <span rounded-full bg-amber-500 h-1.5 w-1.5 />
+                  横向分割线 ({{ hLineCount }})
+                </h3>
+                <div v-if="hLines.length === 0" border="1 dashed zinc-800" py-4 rounded-lg flex items-center justify-center>
+                  <p text-xs text-zinc-600>
+                    无横向线
+                  </p>
+                </div>
+                <div v-else space-y-1>
+                  <div
+                    v-for="line in hLines"
+                    :key="line.id"
+                    border="1 transparent" bg="zinc-900/50" group px-2 py-1.5 rounded-md flex cursor-pointer transition-all items-center justify-between
+                    :class="{
+                      '!border-emerald-500/50 !bg-emerald-500/10': selectedLineId === line.id,
+                      '!border-cyan-500/50 !bg-cyan-500/5': hoveredLineId === line.id && selectedLineId !== line.id,
+                    }"
+                    @mouseenter="handleLineHover(line.id)"
+                    @mouseleave="handleLineHover(null)"
+                    @click="handleLineClick(line.id)"
                   >
-                    <span i-carbon-close text-sm />
-                  </button>
+                    <div flex gap-2 items-center>
+                      <span rounded-full bg-amber-500 h-1.5 w-1.5 />
+                      <span text="[11px] zinc-300" font-medium>
+                        {{ Math.round(line.position) }}%
+                      </span>
+                    </div>
+                    <button
+                      text-zinc-500 opacity-0 transition-opacity group-hover="opacity-100" hover:text-red-400
+                      @click.stop="removeLine(line.id)"
+                    >
+                      <span i-carbon-close text-sm />
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Vertical Lines -->
+              <div>
+                <h3 text="[10px]" text-zinc-500 tracking-wider font-bold mb-2 flex gap-2 uppercase items-center>
+                  <span rounded-full bg-emerald-500 h-1.5 w-1.5 />
+                  纵向分割线 ({{ vLineCount }})
+                </h3>
+                <div v-if="vLines.length === 0" border="1 dashed zinc-800" py-4 rounded-lg flex items-center justify-center>
+                  <p text-xs text-zinc-600>
+                    无纵向线
+                  </p>
+                </div>
+                <div v-else space-y-1>
+                  <div
+                    v-for="line in vLines"
+                    :key="line.id"
+                    border="1 transparent" bg="zinc-900/50" group px-2 py-1.5 rounded-md flex cursor-pointer transition-all items-center justify-between
+                    :class="{
+                      '!border-emerald-500/50 !bg-emerald-500/10': selectedLineId === line.id,
+                      '!border-cyan-500/50 !bg-cyan-500/5': hoveredLineId === line.id && selectedLineId !== line.id,
+                    }"
+                    @mouseenter="handleLineHover(line.id)"
+                    @mouseleave="handleLineHover(null)"
+                    @click="handleLineClick(line.id)"
+                  >
+                    <div flex gap-2 items-center>
+                      <span rounded-full bg-emerald-500 h-1.5 w-1.5 />
+                      <span text="[11px] zinc-300" font-medium>
+                        {{ Math.round(line.position) }}%
+                      </span>
+                    </div>
+                    <button
+                      text-zinc-500 opacity-0 transition-opacity group-hover="opacity-100" hover:text-red-400
+                      @click.stop="removeLine(line.id)"
+                    >
+                      <span i-carbon-close text-sm />
+                    </button>
+                  </div>
                 </div>
               </div>
             </section>
@@ -210,12 +302,12 @@ function removeLine(id: string) {
               <span text="[10px] zinc-500" font-bold uppercase>输出预览</span>
               <span text-sm text-zinc-100 font-bold>{{ pieceCount }} 张切片</span>
             </div>
-            <div text-emerald-400 p-1.5 rounded-full bg-zinc-800 h-8 w-8>
-              <span i-carbon-grid text-xl />
+            <div text-emerald-400 p-1.5 rounded-full bg-zinc-800 flex h-8 w-8 items-center justify-center>
+              <span i-carbon-grid text-lg block />
             </div>
           </div>
           <button
-            shadow="xl emerald-500/10" hover:shadow="indigo-500/20" active:scale="[0.98]"
+            shadow="xl emerald-500/10" hover:shadow="emerald-500/20" active:scale="[0.98]"
             group py-4 rounded-xl bg-emerald-600 flex gap-2 w-full cursor-pointer transition-all items-center justify-center relative overflow-hidden hover:bg-emerald-500 disabled:opacity-50
             :disabled="isExporting || splitLines.length === 0"
             @click="handleExport"
