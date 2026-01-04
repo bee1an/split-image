@@ -165,7 +165,7 @@ function handleLineClick(id: string) {
         </div>
       </main>
 
-      <aside border-l="zinc-800" bg-zinc-950 flex flex-col w-72>
+      <aside border-l="zinc-800" bg-zinc-950 flex flex-col w-80>
         <div custom-scrollbar p-4 flex flex-1 flex-col gap-6 overflow-y-auto>
           <section>
             <h3 text="[10px]" text-zinc-500 tracking-wider font-bold mb-3 uppercase>
@@ -188,25 +188,31 @@ function handleLineClick(id: string) {
           <template v-if="imageSrc">
             <section border="1 zinc-800" bg="zinc-900/50" p-4 rounded-xl>
               <h3 text="[10px]" text-zinc-500 tracking-wider font-bold mb-4 uppercase>
-                自动网格
+                快速分割
               </h3>
               <div space-y-4>
                 <div gap-3 grid grid-cols-2>
                   <div space-y-1.5>
-                    <label text="[10px] zinc-400">横向数量</label>
+                    <label text="[10px] zinc-400">横向线数</label>
                     <input
                       v-model.number="quickHLines"
                       type="number"
+                      min="0"
+                      max="20"
                       border="1 zinc-700" text-xs text-zinc-100 px-2 py-1.5 outline-none rounded-md bg-zinc-800 w-full transition-colors focus:border-emerald-500
                     >
+                    <span text="[9px] zinc-600">→ {{ quickHLines + 1 }} 行</span>
                   </div>
                   <div space-y-1.5>
-                    <label text="[10px] zinc-400">纵向数量</label>
+                    <label text="[10px] zinc-400">纵向线数</label>
                     <input
                       v-model.number="quickVLines"
                       type="number"
+                      min="0"
+                      max="20"
                       border="1 zinc-700" text-xs text-zinc-100 px-2 py-1.5 outline-none rounded-md bg-zinc-800 w-full transition-colors focus:border-emerald-500
                     >
+                    <span text="[9px] zinc-600">→ {{ quickVLines + 1 }} 列</span>
                   </div>
                 </div>
                 <button
@@ -220,82 +226,82 @@ function handleLineClick(id: string) {
 
             <!-- Split Lines Section - Separated by type -->
             <section flex flex-1 flex-col gap-4 min-h-0>
-              <!-- Horizontal Lines -->
-              <div>
-                <h3 text="[10px]" text-zinc-500 tracking-wider font-bold mb-2 flex gap-2 uppercase items-center>
-                  <span rounded-full bg-amber-500 h-1.5 w-1.5 />
-                  横向分割线 ({{ hLineCount }})
-                </h3>
-                <div v-if="hLines.length === 0" border="1 dashed zinc-800" py-4 rounded-lg flex items-center justify-center>
-                  <p text-xs text-zinc-600>
-                    无横向线
-                  </p>
-                </div>
-                <div v-else space-y-1>
-                  <div
-                    v-for="line in hLines"
-                    :key="line.id"
-                    border="1 transparent" bg="zinc-900/50" group px-2 py-1.5 rounded-md flex cursor-pointer transition-all items-center justify-between
-                    :class="{
-                      '!border-emerald-500/50 !bg-emerald-500/10': selectedLineId === line.id,
-                      '!border-cyan-500/50 !bg-cyan-500/5': hoveredLineId === line.id && selectedLineId !== line.id,
-                    }"
-                    @mouseenter="handleLineHover(line.id)"
-                    @mouseleave="handleLineHover(null)"
-                    @click="handleLineClick(line.id)"
-                  >
-                    <div flex gap-2 items-center>
-                      <span rounded-full bg-amber-500 h-1.5 w-1.5 />
-                      <span text="[11px] zinc-300" font-medium>
-                        {{ Math.round(line.position) }}%
-                      </span>
-                    </div>
-                    <button
-                      text-zinc-500 opacity-0 transition-opacity group-hover="opacity-100" hover:text-red-400
-                      @click.stop="removeLine(line.id)"
+              <div flex-1 gap-3 grid grid-cols-2 min-h-0>
+                <!-- Horizontal Lines -->
+                <div flex flex-col min-h-0>
+                  <h3 text="[10px]" text-zinc-500 tracking-wider font-bold mb-2 py-1 bg-zinc-950 flex gap-2 uppercase items-center top-0 sticky z-10>
+                    <span rounded-full bg-amber-500 h-1.5 w-1.5 />
+                    横向 ({{ hLineCount }})
+                  </h3>
+                  <div v-if="hLines.length === 0" border="1 dashed zinc-800" py-6 rounded-lg flex items-center justify-center>
+                    <p text="[10px]" text-zinc-600>
+                      无
+                    </p>
+                  </div>
+                  <div v-else custom-scrollbar pr-1 flex-1 overflow-y-auto space-y-1>
+                    <div
+                      v-for="line in hLines"
+                      :key="line.id"
+                      border="1 transparent" bg="zinc-900/50" group px-2 py-1.5 rounded-md flex cursor-pointer transition-all items-center justify-between
+                      :class="{
+                        '!border-emerald-500/50 !bg-emerald-500/10': selectedLineId === line.id,
+                        '!border-cyan-500/50 !bg-cyan-500/5': hoveredLineId === line.id && selectedLineId !== line.id,
+                      }"
+                      @mouseenter="handleLineHover(line.id)"
+                      @mouseleave="handleLineHover(null)"
+                      @click="handleLineClick(line.id)"
                     >
-                      <span i-carbon-close text-sm />
-                    </button>
+                      <div flex gap-2 items-center>
+                        <span text="[11px] zinc-300" font-medium>
+                          {{ Math.round(line.position) }}%
+                        </span>
+                      </div>
+                      <button
+                        text-zinc-500 opacity-0 transition-opacity group-hover="opacity-100" hover:text-red-400
+                        @click.stop="removeLine(line.id)"
+                      >
+                        <span i-carbon-close text-sm />
+                      </button>
+                    </div>
                   </div>
                 </div>
-              </div>
 
-              <!-- Vertical Lines -->
-              <div>
-                <h3 text="[10px]" text-zinc-500 tracking-wider font-bold mb-2 flex gap-2 uppercase items-center>
-                  <span rounded-full bg-emerald-500 h-1.5 w-1.5 />
-                  纵向分割线 ({{ vLineCount }})
-                </h3>
-                <div v-if="vLines.length === 0" border="1 dashed zinc-800" py-4 rounded-lg flex items-center justify-center>
-                  <p text-xs text-zinc-600>
-                    无纵向线
-                  </p>
-                </div>
-                <div v-else space-y-1>
-                  <div
-                    v-for="line in vLines"
-                    :key="line.id"
-                    border="1 transparent" bg="zinc-900/50" group px-2 py-1.5 rounded-md flex cursor-pointer transition-all items-center justify-between
-                    :class="{
-                      '!border-emerald-500/50 !bg-emerald-500/10': selectedLineId === line.id,
-                      '!border-cyan-500/50 !bg-cyan-500/5': hoveredLineId === line.id && selectedLineId !== line.id,
-                    }"
-                    @mouseenter="handleLineHover(line.id)"
-                    @mouseleave="handleLineHover(null)"
-                    @click="handleLineClick(line.id)"
-                  >
-                    <div flex gap-2 items-center>
-                      <span rounded-full bg-emerald-500 h-1.5 w-1.5 />
-                      <span text="[11px] zinc-300" font-medium>
-                        {{ Math.round(line.position) }}%
-                      </span>
-                    </div>
-                    <button
-                      text-zinc-500 opacity-0 transition-opacity group-hover="opacity-100" hover:text-red-400
-                      @click.stop="removeLine(line.id)"
+                <!-- Vertical Lines -->
+                <div flex flex-col min-h-0>
+                  <h3 text="[10px]" text-zinc-500 tracking-wider font-bold mb-2 py-1 bg-zinc-950 flex gap-2 uppercase items-center top-0 sticky z-10>
+                    <span rounded-full bg-emerald-500 h-1.5 w-1.5 />
+                    纵向 ({{ vLineCount }})
+                  </h3>
+                  <div v-if="vLines.length === 0" border="1 dashed zinc-800" py-6 rounded-lg flex items-center justify-center>
+                    <p text="[10px]" text-zinc-600>
+                      无
+                    </p>
+                  </div>
+                  <div v-else custom-scrollbar pr-1 flex-1 overflow-y-auto space-y-1>
+                    <div
+                      v-for="line in vLines"
+                      :key="line.id"
+                      border="1 transparent" bg="zinc-900/50" group px-2 py-1.5 rounded-md flex cursor-pointer transition-all items-center justify-between
+                      :class="{
+                        '!border-emerald-500/50 !bg-emerald-500/10': selectedLineId === line.id,
+                        '!border-cyan-500/50 !bg-cyan-500/5': hoveredLineId === line.id && selectedLineId !== line.id,
+                      }"
+                      @mouseenter="handleLineHover(line.id)"
+                      @mouseleave="handleLineHover(null)"
+                      @click="handleLineClick(line.id)"
                     >
-                      <span i-carbon-close text-sm />
-                    </button>
+                      <div flex gap-2 items-center>
+                        <span text="[11px] zinc-300" font-medium>
+                          {{ Math.round(line.position) }}%
+                        </span>
+                      </div>
+                      <button
+                        text-zinc-500 opacity-0 transition-opacity group-hover="opacity-100" hover:text-red-400
+                        @click.stop="removeLine(line.id)"
+                      >
+                        <span i-carbon-close text-sm />
+                      </button>
+                    </div>
                   </div>
                 </div>
               </div>
