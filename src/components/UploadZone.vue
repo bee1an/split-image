@@ -1,5 +1,7 @@
 <script setup lang="ts">
 import { useTempFolder } from '../composables/tempFolder'
+import { handleError } from '../utils/errorHandler'
+import { tempFilesToFiles } from '../utils/fileConverter'
 
 const props = withDefaults(defineProps<{
   multiple?: boolean
@@ -34,13 +36,8 @@ async function handleDrop(e: DragEvent) {
   if (tempFolderData) {
     try {
       const allFiles = JSON.parse(tempFolderData) as { name: string, src: string }[]
-      const files = await Promise.all(
-        allFiles.map(async ({ name, src }) => {
-          const res = await fetch(src)
-          const blob = await res.blob()
-          return new File([blob], `${name}.png`, { type: blob.type })
-        }),
-      )
+      const files = await tempFilesToFiles(allFiles)
+
       if (props.multiple) {
         emit('upload', files)
       }
@@ -50,7 +47,7 @@ async function handleDrop(e: DragEvent) {
       return
     }
     catch (err) {
-      console.error('Failed to process temp folder:', err)
+      handleError(err, '处理临时文件夹失败')
     }
   }
 
@@ -59,14 +56,12 @@ async function handleDrop(e: DragEvent) {
   if (tempFileData) {
     try {
       const { name, src } = JSON.parse(tempFileData)
-      const res = await fetch(src)
-      const blob = await res.blob()
-      const file = new File([blob], `${name}.png`, { type: blob.type })
-      emit('upload', [file])
+      const file = await tempFilesToFiles([{ name, src }])
+      emit('upload', file)
       return
     }
     catch (err) {
-      console.error('Failed to process temp file:', err)
+      handleError(err, '处理临时文件失败')
     }
   }
 
@@ -103,19 +98,18 @@ async function handleTempFolderDrop(e: Event) {
   const customEvent = e as CustomEvent<{ files: { name: string, src: string }[] }>
   const tempFiles = customEvent.detail.files
 
-  const files = await Promise.all(
-    tempFiles.map(async ({ name, src }) => {
-      const res = await fetch(src)
-      const blob = await res.blob()
-      return new File([blob], `${name}.png`, { type: blob.type })
-    }),
-  )
+  try {
+    const files = await tempFilesToFiles(tempFiles)
 
-  if (props.multiple) {
-    emit('upload', files)
+    if (props.multiple) {
+      emit('upload', files)
+    }
+    else if (files.length > 0) {
+      emit('upload', [files[0]])
+    }
   }
-  else if (files.length > 0) {
-    emit('upload', [files[0]])
+  catch (err) {
+    handleError(err, '处理临时文件夹拖放失败')
   }
 }
 
@@ -131,9 +125,9 @@ onUnmounted(() => {
 <template>
   <div
     ref="uploadZoneRef"
-    data-upload-zone
+
     border="1 dashed zinc-300 dark:zinc-800 hover:emerald-500/50"
-    bg="zinc-50 dark:zinc-900/50" group rounded-xl flex flex-col gap-3 h-40 w-full cursor-pointer transition-all items-center justify-center relative overflow-hidden hover:bg-zinc-100 dark:hover:bg-zinc-900
+    bg="zinc-50 dark:zinc-900/50" group data-upload-zone rounded-xl flex flex-col gap-3 h-40 w-full cursor-pointer transition-all items-center justify-center relative overflow-hidden hover:bg-zinc-100 dark:hover:bg-zinc-900
     :class="{
       '!border-emerald-500 !bg-emerald-500/5': isDragging,
       '!border-amber-500 !bg-amber-500/5 animate-pulse': isTempFileDragging,

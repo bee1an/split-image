@@ -1,6 +1,9 @@
 <script setup lang="ts">
 import type { TempFile } from '../composables/tempFolder'
+import type { Position } from '../composables/useDraggable'
 import { useTempFolder } from '../composables/tempFolder'
+import { useDraggable } from '../composables/useDraggable'
+import { DRAG_CONSTANTS, TEMP_FOLDER_CONSTANTS } from '../config/constants'
 
 const emit = defineEmits<{
   select: [file: TempFile]
@@ -10,43 +13,71 @@ const { files, isOpen, isDragging: isTempFileDragging, removeFile, clearAll, clo
 
 // Panel drag state
 const panelRef = ref<HTMLDivElement>()
+const panelPosition = ref<Position>({
+  x: DRAG_CONSTANTS.DEFAULT_PANEL_POSITION.x,
+  y: DRAG_CONSTANTS.DEFAULT_PANEL_POSITION.y,
+})
+const panelDragOffset = ref<Position>({ x: 0, y: 0 })
 const isPanelDragging = ref(false)
-const position = ref({ x: 20, y: 100 })
-const dragOffset = ref({ x: 0, y: 0 })
+
+// 面板拖拽
+const { startDrag: _startPanelDrag } = useDraggable({
+  threshold: 0,
+  offset: panelDragOffset,
+  excludeSelector: 'button, img, .no-drag',
+  onDragStart: () => {
+    isPanelDragging.value = true
+  },
+  onDragMove: (_e, newPosition) => {
+    panelPosition.value = newPosition
+  },
+  onDragEnd: () => {
+    isPanelDragging.value = false
+  },
+})
+
+function startPanelDrag(e: MouseEvent) {
+  if ((e.target as HTMLElement).closest('button, img, .no-drag'))
+    return
+  const rect = panelRef.value!.getBoundingClientRect()
+  panelDragOffset.value = {
+    x: e.clientX - rect.left,
+    y: e.clientY - rect.top,
+  }
+  _startPanelDrag(e)
+}
 
 // Button drag state
+const buttonPosition = ref<Position>({
+  x: DRAG_CONSTANTS.DEFAULT_PANEL_POSITION.x,
+  y: DRAG_CONSTANTS.DEFAULT_PANEL_POSITION.y,
+})
 const isButtonDragging = ref(false)
-const buttonDragStart = ref({ x: 0, y: 0 })
 
-function startButtonDrag(e: MouseEvent) {
-  e.preventDefault()
-  buttonDragStart.value = { x: e.clientX, y: e.clientY }
-  isButtonDragging.value = false
-
-  const handleMouseMove = (em: MouseEvent) => {
-    const dx = Math.abs(em.clientX - buttonDragStart.value.x)
-    const dy = Math.abs(em.clientY - buttonDragStart.value.y)
-    // Start dragging if moved more than 5px
-    if (dx > 5 || dy > 5) {
-      isButtonDragging.value = true
-      isTempFileDragging.value = true
-      position.value = {
-        x: em.clientX - 24, // Center of button (48/2)
-        y: em.clientY - 24,
-      }
+// 按钮拖拽
+const { startDrag: startButtonDrag } = useDraggable({
+  threshold: DRAG_CONSTANTS.THRESHOLD,
+  onDragStart: () => {
+    isButtonDragging.value = true
+    isTempFileDragging.value = true
+  },
+  onDragMove: (e) => {
+    // 计算按钮位置（中心对齐鼠标）
+    buttonPosition.value = {
+      x: e.clientX - DRAG_CONSTANTS.BUTTON_CENTER_OFFSET,
+      y: e.clientY - DRAG_CONSTANTS.BUTTON_CENTER_OFFSET,
     }
-  }
+    // 同步面板位置
+    panelPosition.value = buttonPosition.value
+  },
+  onDragEnd: (e, wasDragging) => {
+    isTempFileDragging.value = false
 
-  const handleMouseUp = (em: MouseEvent) => {
-    window.removeEventListener('mousemove', handleMouseMove)
-    window.removeEventListener('mouseup', handleMouseUp)
-
-    if (isButtonDragging.value && files.value.length > 0) {
-      // Check if dropped on UploadZone (use elementsFromPoint to look through layers)
-      const elements = document.elementsFromPoint(em.clientX, em.clientY)
+    // 如果真的拖拽了且有文件，检查是否在上传区域
+    if (wasDragging && files.value.length > 0) {
+      const elements = document.elementsFromPoint(e.clientX, e.clientY)
       const uploadZone = elements.find(el => el.hasAttribute('data-upload-zone'))
       if (uploadZone) {
-        // Trigger upload event via custom event
         const event = new CustomEvent('temp-folder-drop', {
           detail: { files: files.value.map(f => ({ name: f.name, src: f.src })) },
           bubbles: true,
@@ -55,50 +86,17 @@ function startButtonDrag(e: MouseEvent) {
       }
     }
 
-    isTempFileDragging.value = false
-    // Delay click reset to prevent toggle on drag end
+    // 延迟重置拖拽状态，确保 click 事件触发时仍能检测到拖拽
     setTimeout(() => {
       isButtonDragging.value = false
-    }, 10)
-  }
-
-  window.addEventListener('mousemove', handleMouseMove)
-  window.addEventListener('mouseup', handleMouseUp)
-}
+    }, 50)
+  },
+})
 
 function onButtonClick() {
   if (!isButtonDragging.value) {
     toggle()
   }
-}
-
-// Panel drag functions
-function startPanelDrag(e: MouseEvent) {
-  if ((e.target as HTMLElement).closest('button, img, .no-drag'))
-    return
-  isPanelDragging.value = true
-  const rect = panelRef.value!.getBoundingClientRect()
-  dragOffset.value = {
-    x: e.clientX - rect.left,
-    y: e.clientY - rect.top,
-  }
-  window.addEventListener('mousemove', onPanelDrag)
-  window.addEventListener('mouseup', stopPanelDrag)
-}
-
-function onPanelDrag(e: MouseEvent) {
-  if (!isPanelDragging.value)
-    return
-  position.value = {
-    x: e.clientX - dragOffset.value.x,
-    y: e.clientY - dragOffset.value.y,
-  }
-}
-
-function stopPanelDrag() {
-  isPanelDragging.value = false
-  window.removeEventListener('mousemove', onPanelDrag)
-  window.removeEventListener('mouseup', stopPanelDrag)
 }
 
 function handleSelect(file: TempFile) {
@@ -125,14 +123,14 @@ function handleFileDragEnd() {
     <div
       v-if="!isOpen"
       select-none fixed z-1000
-      :style="{ left: `${position.x}px`, top: `${position.y}px` }"
+      :style="{ left: `${buttonPosition.x}px`, top: `${buttonPosition.y}px` }"
       :class="isButtonDragging ? 'cursor-grabbing' : 'cursor-grab'"
       @mousedown="startButtonDrag"
       @click="onButtonClick"
     >
       <button
         bg="emerald-500 hover:emerald-400"
-        rounded-full h-12 w-12 pointer-events-none shadow-xl transition-all relative
+        rounded-full flex h-12 w-12 pointer-events-none shadow-xl transition-all items-center justify-center relative
       >
         <div i-carbon-folder text-xl text-white />
         <span
@@ -141,7 +139,7 @@ function handleFileDragEnd() {
           font-bold rounded-full bg-red-500 flex h-5 w-5 items-center right-0 top-0 justify-center absolute
           border="2 white dark:zinc-900"
         >
-          {{ files.length > 99 ? '99' : files.length }}
+          {{ files.length > TEMP_FOLDER_CONSTANTS.MAX_DISPLAY_COUNT ? `${TEMP_FOLDER_CONSTANTS.MAX_DISPLAY_COUNT}` : files.length }}
         </span>
       </button>
     </div>
@@ -159,7 +157,7 @@ function handleFileDragEnd() {
         rounded-xl w-80 shadow-2xl fixed z-1000 overflow-hidden
         bg="white dark:zinc-900"
         border="1 zinc-200 dark:zinc-800"
-        :style="{ left: `${position.x}px`, top: `${position.y}px` }"
+        :style="{ left: `${panelPosition.x}px`, top: `${panelPosition.y}px` }"
         :class="{ 'cursor-grabbing': isPanelDragging, 'cursor-grab': !isPanelDragging }"
         @mousedown="startPanelDrag"
       >
@@ -192,7 +190,7 @@ function handleFileDragEnd() {
               hover:bg="zinc-200 dark:zinc-700" text-zinc-400 p-1.5 rounded-md transition-colors hover:text-zinc-600
               @click.stop="close"
             >
-              <span i-carbon-close />
+              <div i-carbon-close />
             </button>
           </div>
         </div>

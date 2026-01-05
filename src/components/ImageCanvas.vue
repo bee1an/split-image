@@ -2,6 +2,7 @@
 import type { SplitLine } from '../utils/splitImage'
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { isDark } from '../composables/dark'
+import { CANVAS_CONSTANTS, COLOR_CONSTANTS, LINE_STYLE_CONSTANTS } from '../config/constants'
 import { clamp, generateId } from '../utils/common'
 
 defineProps<{
@@ -43,11 +44,34 @@ const displaySize = computed(() => {
   }
 })
 
-const EDGE_THRESHOLD = 24
-const LINE_HIT_THRESHOLD = 10
-
 const draggingLineId = ref<string | null>(null)
 const creatingLine = ref<{ type: 'h' | 'v', position: number } | null>(null)
+
+/**
+ * 绘制分割线的路径
+ * @param ctx Canvas 上下文
+ * @param line 分割线对象
+ * @param width 画布宽度
+ * @param height 画布高度
+ */
+function drawLinePath(
+  ctx: CanvasRenderingContext2D,
+  line: SplitLine,
+  width: number,
+  height: number,
+) {
+  ctx.beginPath()
+  if (line.type === 'h') {
+    const y = (line.position / 100) * height
+    ctx.moveTo(0, y)
+    ctx.lineTo(width, y)
+  }
+  else {
+    const x = (line.position / 100) * width
+    ctx.moveTo(x, 0)
+    ctx.lineTo(x, height)
+  }
+}
 const cursorStyle = ref('default')
 const isAnimating = ref(false)
 
@@ -79,13 +103,13 @@ function isNearEdge(pos: { x: number, y: number }): 'left' | 'right' | 'top' | '
   if (pos.x < 0 || pos.x > width || pos.y < 0 || pos.y > height) {
     return null
   }
-  if (pos.x <= EDGE_THRESHOLD)
+  if (pos.x <= CANVAS_CONSTANTS.EDGE_THRESHOLD)
     return 'left'
-  if (pos.x >= width - EDGE_THRESHOLD)
+  if (pos.x >= width - CANVAS_CONSTANTS.EDGE_THRESHOLD)
     return 'right'
-  if (pos.y <= EDGE_THRESHOLD)
+  if (pos.y <= CANVAS_CONSTANTS.EDGE_THRESHOLD)
     return 'top'
-  if (pos.y >= height - EDGE_THRESHOLD)
+  if (pos.y >= height - CANVAS_CONSTANTS.EDGE_THRESHOLD)
     return 'bottom'
   return null
 }
@@ -100,13 +124,13 @@ function findLineAtPosition(pos: { x: number, y: number }): SplitLine | null {
   for (const line of lines.value) {
     if (line.type === 'h') {
       const lineY = (line.position / 100) * height
-      if (Math.abs(pos.y - lineY) <= LINE_HIT_THRESHOLD) {
+      if (Math.abs(pos.y - lineY) <= CANVAS_CONSTANTS.LINE_HIT_THRESHOLD) {
         return line
       }
     }
     else {
       const lineX = (line.position / 100) * width
-      if (Math.abs(pos.x - lineX) <= LINE_HIT_THRESHOLD) {
+      if (Math.abs(pos.x - lineX) <= CANVAS_CONSTANTS.LINE_HIT_THRESHOLD) {
         return line
       }
     }
@@ -299,50 +323,29 @@ function draw() {
     const isHovered = line.id === hoveredLineId.value && !isSelected
 
     // Colors: selected = emerald, hovered = cyan, default = zinc
-    let strokeColor = isDark.value ? '#a1a1aa' : '#52525b'
-    let lineWidth = 1
+    let strokeColor: string = isDark.value ? COLOR_CONSTANTS.LINE_DEFAULT_DARK : COLOR_CONSTANTS.LINE_DEFAULT_LIGHT
+    let lineWidth: number = LINE_STYLE_CONSTANTS.DEFAULT_WIDTH
 
     if (isSelected) {
-      strokeColor = '#10b981'
-      lineWidth = 2
+      strokeColor = COLOR_CONSTANTS.SELECTED
+      lineWidth = LINE_STYLE_CONSTANTS.ACTIVE_WIDTH
     }
     else if (isHovered) {
-      strokeColor = '#22d3ee'
-      lineWidth = 2
+      strokeColor = COLOR_CONSTANTS.HOVERED
+      lineWidth = LINE_STYLE_CONSTANTS.ACTIVE_WIDTH
     }
 
     // Draw line shadow/glow for better contrast on complex backgrounds
-    ctx.strokeStyle = isDark.value ? 'rgba(0,0,0,0.5)' : 'rgba(255,255,255,0.5)'
-    ctx.lineWidth = lineWidth + 2
-    ctx.beginPath()
-    if (line.type === 'h') {
-      const y = (line.position / 100) * height
-      ctx.moveTo(0, y)
-      ctx.lineTo(width, y)
-    }
-    else {
-      const x = (line.position / 100) * width
-      ctx.moveTo(x, 0)
-      ctx.lineTo(x, height)
-    }
+    ctx.strokeStyle = isDark.value ? COLOR_CONSTANTS.SHADOW_DARK : COLOR_CONSTANTS.SHADOW_LIGHT
+    ctx.lineWidth = lineWidth + LINE_STYLE_CONSTANTS.SHADOW_EXTRA_WIDTH
+    drawLinePath(ctx, line, width, height)
     ctx.stroke()
 
     // Draw main line
     ctx.strokeStyle = strokeColor
     ctx.lineWidth = lineWidth
     ctx.setLineDash([])
-
-    ctx.beginPath()
-    if (line.type === 'h') {
-      const y = (line.position / 100) * height
-      ctx.moveTo(0, y)
-      ctx.lineTo(width, y)
-    }
-    else {
-      const x = (line.position / 100) * width
-      ctx.moveTo(x, 0)
-      ctx.lineTo(x, height)
-    }
+    drawLinePath(ctx, line, width, height)
     ctx.stroke()
 
     if (isSelected || isHovered) {
@@ -369,8 +372,8 @@ function draw() {
   }
 
   if (creatingLine.value) {
-    ctx.strokeStyle = '#10b981'
-    ctx.lineWidth = 1
+    ctx.strokeStyle = COLOR_CONSTANTS.SELECTED
+    ctx.lineWidth = LINE_STYLE_CONSTANTS.DEFAULT_WIDTH
     ctx.setLineDash([4, 4])
 
     ctx.beginPath()

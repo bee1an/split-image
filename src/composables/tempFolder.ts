@@ -1,5 +1,6 @@
 import { createSharedComposable } from '@vueuse/core'
 import { ref } from 'vue'
+import { generateId } from '../utils/common'
 
 export interface TempFile {
   id: string
@@ -21,7 +22,7 @@ export const useTempFolder = createSharedComposable(() => {
     }
     files.value.unshift({
       ...file,
-      id: Math.random().toString(36).slice(2, 9),
+      id: generateId(),
       createdAt: Date.now(),
     })
   }
@@ -31,11 +32,12 @@ export const useTempFolder = createSharedComposable(() => {
     const existingSrcs = new Set(files.value.map(f => f.src))
     const uniqueFiles = newFiles.filter(f => !existingSrcs.has(f.src))
 
-    if (uniqueFiles.length === 0) return
+    if (uniqueFiles.length === 0)
+      return
 
     const items = uniqueFiles.map(f => ({
       ...f,
-      id: Math.random().toString(36).slice(2, 9),
+      id: generateId(),
       createdAt: Date.now(),
     }))
     files.value.unshift(...items)

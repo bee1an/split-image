@@ -1,5 +1,6 @@
 import { createSharedComposable } from '@vueuse/core'
 import { computed, ref } from 'vue'
+import { generateId } from '../utils/common'
 
 export interface ImageItem {
   id: string
@@ -20,7 +21,7 @@ export const useImageState = createSharedComposable(() => {
 
   function addImages(files: { name: string, src: string }[]) {
     const newItems = files.map(f => ({
-      id: Math.random().toString(36).slice(2, 9),
+      id: generateId(),
       name: f.name,
       originalSrc: f.src,
       processedSrc: f.src,
@@ -33,9 +34,10 @@ export const useImageState = createSharedComposable(() => {
   }
 
   function updateItem(id: string, updates: Partial<ImageItem>) {
-    const item = items.value.find(i => i.id === id)
-    if (item) {
-      Object.assign(item, updates)
+    const index = items.value.findIndex(i => i.id === id)
+    if (index !== -1) {
+      // 使用不可变更新模式，确保 Vue 响应式系统能追踪变化
+      items.value[index] = { ...items.value[index], ...updates }
     }
   }
 
@@ -59,10 +61,7 @@ export const useImageState = createSharedComposable(() => {
   }
 
   function resetToOriginal(id: string) {
-    const item = items.value.find(i => i.id === id)
-    if (item) {
-      item.processedSrc = item.originalSrc
-    }
+    updateItem(id, { processedSrc: items.value.find(i => i.id === id)!.originalSrc })
   }
 
   return {

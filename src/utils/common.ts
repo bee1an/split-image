@@ -1,8 +1,11 @@
+import { nanoid } from 'nanoid'
+
 /**
- * Generate a unique ID
+ * Generate a unique ID using nanoid
+ * More reliable than Math.random() with collision resistance
  */
 export function generateId(): string {
-  return Math.random().toString(36).substring(2, 9)
+  return nanoid()
 }
 
 /**

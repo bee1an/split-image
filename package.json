@@ -16,6 +16,7 @@
     "@vueuse/core": "catalog:frontend",
     "file-saver": "catalog:",
     "jszip": "catalog:",
+    "nanoid": "catalog:",
     "roughjs": "catalog:",
     "vue": "catalog:frontend",
     "vue-router": "catalog:frontend"
