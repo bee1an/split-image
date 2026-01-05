@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import TempFolderPanel from './components/TempFolderPanel.vue'
 import { toggleDark } from './composables/dark'
 </script>
 
@@ -62,6 +63,9 @@ import { toggleDark } from './composables/dark'
       </div>
     </nav>
   </div>
+
+  <!-- Temp Folder Panel -->
+  <TempFolderPanel />
 </template>
 
 <style>

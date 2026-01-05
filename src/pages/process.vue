@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import UploadZone from '../components/UploadZone.vue'
 import { useImageState } from '../composables/image'
+import { useTempFolder } from '../composables/tempFolder'
 import { downloadAsZip } from '../utils/downloadZip'
 import { processWhiteBackgroundImage } from '../utils/imageProcess'
 
@@ -21,6 +22,8 @@ const processPadding = ref(0)
 const enableTrimMargins = ref(true)
 const isProcessing = ref(false)
 const selectedIds = ref<Set<string>>(new Set())
+
+const { addFiles, open: openTempFolder } = useTempFolder()
 
 // Selection Interaction
 const previewRef = ref<HTMLDivElement>()
@@ -160,6 +163,21 @@ async function handleDownloadBatch() {
     'png',
     processedData.map(d => d.name),
   )
+}
+
+async function handleAddSelectedToTemp() {
+  const targets = items.value.filter(item => selectedIds.value.has(item.id))
+  if (targets.length === 0)
+    return
+
+  addFiles(
+    targets.map(item => ({
+      name: item.name.replace(/\.[^/.]+$/, ''),
+      src: item.processedSrc,
+      source: 'process' as const,
+    })),
+  )
+  openTempFolder()
 }
 </script>
 
@@ -399,13 +417,28 @@ async function handleDownloadBatch() {
                     </div>
                   </button>
 
-                  <button
-                    v-if="selectedIds.size > 0"
-                    border="1 zinc-200 dark:zinc-800" text-xs text-zinc-600 font-bold py-2.5 rounded-md transition-colors hover:bg-zinc-50 dark:hover:bg-zinc-800
-                    @click="handleDownloadBatch"
-                  >
-                    导出选中为 ZIP
-                  </button>
+                  <template v-if="selectedIds.size > 0">
+                    <div flex gap-2>
+                      <button
+                        border="1 zinc-200 dark:zinc-700" text-xs text-zinc-600 font-bold py-2.5 rounded-md flex-1 transition-colors dark:text-zinc-400 hover:bg="zinc-100 dark:zinc-800"
+                        @click="handleAddSelectedToTemp"
+                      >
+                        <div flex gap-1 items-center justify-center>
+                          <span i-carbon-folder-add text-sm />
+                          <span>添加到临时</span>
+                        </div>
+                      </button>
+                      <button
+                        border="1 zinc-200 dark:zinc-700" text-xs text-zinc-600 font-bold py-2.5 rounded-md flex-1 transition-colors dark:text-zinc-400 hover:bg="zinc-100 dark:zinc-800"
+                        @click="handleDownloadBatch"
+                      >
+                        <div flex gap-1 items-center justify-center>
+                          <span i-carbon-download text-sm />
+                          <span>下载 ZIP</span>
+                        </div>
+                      </button>
+                    </div>
+                  </template>
                 </div>
               </div>
             </section>

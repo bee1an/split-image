@@ -3,17 +3,20 @@ import type { ImageFormat, SplitLine } from '../utils/splitImage'
 import ImageCanvas from '../components/ImageCanvas.vue'
 import UploadZone from '../components/UploadZone.vue'
 
-// Single image state (split tool only handles one image)
+import { useTempFolder } from '../composables/tempFolder'
 import { generateId } from '../utils/common'
 import { downloadAsZip } from '../utils/downloadZip'
 import { splitImage } from '../utils/splitImage'
 
+// Single image state (split tool only handles one image)
 const imageSrc = ref('')
 const imageName = ref('')
 const splitLines = ref<SplitLine[]>([])
 const isExporting = ref(false)
 const canvasRef = ref<InstanceType<typeof ImageCanvas>>()
 const exportButtonRef = ref<HTMLButtonElement>()
+
+const { addFiles, open: openTempFolder } = useTempFolder()
 
 const quickHLines = ref(0)
 const quickVLines = ref(0)
@@ -75,6 +78,7 @@ async function handleExport() {
       format: exportFormat.value,
       quality: exportQuality.value,
     })
+
     await downloadAsZip(blobs, imageName.value || 'image', splitLines.value, exportFormat.value)
   }
   catch (error) {
@@ -82,9 +86,49 @@ async function handleExport() {
   }
   finally {
     isExporting.value = false
-    // Redraw canvas after animation
     canvasRef.value?.draw()
   }
+}
+
+async function handleAddToTemp() {
+  const image = canvasRef.value?.getImage()
+  if (!image || !imageSrc.value)
+    return
+
+  isExporting.value = true
+  try {
+    const blobs = await splitImage(image, splitLines.value, {
+      format: exportFormat.value,
+      quality: exportQuality.value,
+    })
+
+    const tempFiles = await Promise.all(
+      blobs.map(async (blob, idx) => {
+        const src = await blobToDataURL(blob)
+        return {
+          name: `${imageName.value || 'slice'}_${idx + 1}`,
+          src,
+          source: 'split' as const,
+        }
+      }),
+    )
+    addFiles(tempFiles)
+    openTempFolder()
+  }
+  catch (error) {
+    console.error('添加到临时文件夹失败:', error)
+  }
+  finally {
+    isExporting.value = false
+  }
+}
+
+function blobToDataURL(blob: Blob): Promise<string> {
+  return new Promise((resolve) => {
+    const reader = new FileReader()
+    reader.onload = () => resolve(reader.result as string)
+    reader.readAsDataURL(blob)
+  })
 }
 
 function handleClear() {
@@ -371,17 +415,29 @@ function handleLineClick(id: string) {
             </div>
           </div>
 
-          <button
-            ref="exportButtonRef"
-            shadow="xl emerald-500/10 hover:emerald-500/20" active:scale="[0.98]"
-            group py-4 rounded-xl bg-emerald-600 flex gap-2 w-full cursor-pointer transition-all items-center justify-center relative overflow-hidden hover:bg-emerald-500 disabled:opacity-50
-            :disabled="isExporting || splitLines.length === 0"
-            @click="handleExport"
-          >
-            <span v-if="isExporting" i-carbon-rotate-360 text-xl text-white animate-spin />
-            <span v-else i-carbon-zip text-xl text-white />
-            <span text-white tracking-tight font-bold>打包下载 ZIP</span>
-          </button>
+          <div flex gap-2>
+            <button
+              border="1 zinc-200 dark:zinc-700" hover:bg="zinc-100 dark:zinc-800" text-xs text-zinc-600 font-bold py-3 rounded-xl flex-1 transition-colors dark:text-zinc-400 disabled:opacity-50
+              :disabled="isExporting || splitLines.length === 0"
+              @click="handleAddToTemp"
+            >
+              <div flex gap-1.5 items-center justify-center>
+                <span i-carbon-folder-add />
+                <span>添加到临时文件夹</span>
+              </div>
+            </button>
+            <button
+              ref="exportButtonRef"
+              shadow="xl emerald-500/10" active:scale="[0.98]"
+              text-xs text-white font-bold py-3 rounded-xl bg-emerald-600 flex flex-1 gap-1.5 cursor-pointer transition-all items-center justify-center hover:bg-emerald-500 disabled:opacity-50
+              :disabled="isExporting || splitLines.length === 0"
+              @click="handleExport"
+            >
+              <span v-if="isExporting" i-carbon-rotate-360 animate-spin />
+              <span v-else i-carbon-download />
+              <span>下载 ZIP</span>
+            </button>
+          </div>
         </div>
       </aside>
     </div>

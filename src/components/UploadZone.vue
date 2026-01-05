@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import { useTempFolder } from '../composables/tempFolder'
+
 const props = withDefaults(defineProps<{
   multiple?: boolean
 }>(), {
@@ -8,6 +10,8 @@ const props = withDefaults(defineProps<{
 const emit = defineEmits<{
   upload: [files: File[]]
 }>()
+
+const { isDragging: isTempFileDragging } = useTempFolder()
 
 const isDragging = ref(false)
 const fileInput = ref<HTMLInputElement>()
@@ -21,9 +25,52 @@ function handleDragLeave() {
   isDragging.value = false
 }
 
-function handleDrop(e: DragEvent) {
+async function handleDrop(e: DragEvent) {
   e.preventDefault()
   isDragging.value = false
+
+  // Check if it's a temp folder drop (all files)
+  const tempFolderData = e.dataTransfer?.getData('application/x-temp-folder')
+  if (tempFolderData) {
+    try {
+      const allFiles = JSON.parse(tempFolderData) as { name: string, src: string }[]
+      const files = await Promise.all(
+        allFiles.map(async ({ name, src }) => {
+          const res = await fetch(src)
+          const blob = await res.blob()
+          return new File([blob], `${name}.png`, { type: blob.type })
+        }),
+      )
+      if (props.multiple) {
+        emit('upload', files)
+      }
+      else if (files.length > 0) {
+        emit('upload', [files[0]])
+      }
+      return
+    }
+    catch (err) {
+      console.error('Failed to process temp folder:', err)
+    }
+  }
+
+  // Check if it's a single temp file drop
+  const tempFileData = e.dataTransfer?.getData('application/x-temp-file')
+  if (tempFileData) {
+    try {
+      const { name, src } = JSON.parse(tempFileData)
+      const res = await fetch(src)
+      const blob = await res.blob()
+      const file = new File([blob], `${name}.png`, { type: blob.type })
+      emit('upload', [file])
+      return
+    }
+    catch (err) {
+      console.error('Failed to process temp file:', err)
+    }
+  }
+
+  // Normal file drop
   let files = Array.from(e.dataTransfer?.files || []).filter(file => file.type.startsWith('image/'))
   if (!props.multiple && files.length > 0) {
     files = [files[0]]
@@ -48,13 +95,49 @@ function handleFileChange(e: Event) {
     target.value = ''
   }
 }
+
+// Handle temp folder drop (custom event from TempFolderPanel)
+const uploadZoneRef = ref<HTMLDivElement>()
+
+async function handleTempFolderDrop(e: Event) {
+  const customEvent = e as CustomEvent<{ files: { name: string, src: string }[] }>
+  const tempFiles = customEvent.detail.files
+
+  const files = await Promise.all(
+    tempFiles.map(async ({ name, src }) => {
+      const res = await fetch(src)
+      const blob = await res.blob()
+      return new File([blob], `${name}.png`, { type: blob.type })
+    }),
+  )
+
+  if (props.multiple) {
+    emit('upload', files)
+  }
+  else if (files.length > 0) {
+    emit('upload', [files[0]])
+  }
+}
+
+onMounted(() => {
+  uploadZoneRef.value?.addEventListener('temp-folder-drop', handleTempFolderDrop)
+})
+
+onUnmounted(() => {
+  uploadZoneRef.value?.removeEventListener('temp-folder-drop', handleTempFolderDrop)
+})
 </script>
 
 <template>
   <div
+    ref="uploadZoneRef"
+    data-upload-zone
     border="1 dashed zinc-300 dark:zinc-800 hover:emerald-500/50"
     bg="zinc-50 dark:zinc-900/50" group rounded-xl flex flex-col gap-3 h-40 w-full cursor-pointer transition-all items-center justify-center relative overflow-hidden hover:bg-zinc-100 dark:hover:bg-zinc-900
-    :class="{ '!border-emerald-500 !bg-emerald-500/5': isDragging }"
+    :class="{
+      '!border-emerald-500 !bg-emerald-500/5': isDragging,
+      '!border-amber-500 !bg-amber-500/5 animate-pulse': isTempFileDragging,
+    }"
     @dragover="handleDragOver"
     @dragleave="handleDragLeave"
     @drop="handleDrop"
