@@ -2,7 +2,7 @@
 import type { ImageFormat, SplitLine } from '../utils/splitImage'
 import ImageCanvas from '../components/ImageCanvas.vue'
 import UploadZone from '../components/UploadZone.vue'
-import { isDark } from '../composables/dark'
+
 import { useImageState } from '../composables/image'
 import { generateId } from '../utils/common'
 import { downloadAsZip } from '../utils/downloadZip'
@@ -170,7 +170,7 @@ function handleLineClick(id: string) {
       </main>
 
       <aside border-l="zinc-200 dark:zinc-800" bg-white flex flex-col w-80 shadow-md shadow-zinc-200 dark:bg-zinc-950 dark:shadow-none>
-        <div custom-scrollbar p-4 flex flex-1 flex-col gap-6 overflow-y-auto>
+        <div class="custom-scrollbar" p-4 flex flex-1 flex-col gap-6 overflow-y-auto>
           <section>
             <h3 text="[10px]" text-zinc-500 tracking-wider font-bold mb-3 uppercase>
               原始图片
@@ -178,7 +178,7 @@ function handleLineClick(id: string) {
             <UploadZone @upload="handleUpload" />
 
             <!-- Gallery switcher in index page -->
-            <div v-if="items.length > 1" custom-scrollbar mt-4 px-1 gap-2 grid grid-cols-4 max-h-48 overflow-y-auto>
+            <div v-if="items.length > 1" class="custom-scrollbar" mt-4 px-1 gap-2 grid grid-cols-4 max-h-48 overflow-y-auto>
               <div
                 v-for="(item, idx) in items"
                 :key="item.id"
@@ -201,7 +201,7 @@ function handleLineClick(id: string) {
                     更换图片
                   </button>
                   <RouterLink
-                    to="/prepare"
+                    to="/process"
                     border="1 emerald-500/30" text-xs text-emerald-400 font-semibold px-4 py-2 text-center rounded-md bg="emerald-500/10" shadow-xl transition-transform hover:bg="emerald-500/20" active:scale-95 hover:scale-105
                   >
                     去后期处理
@@ -264,7 +264,7 @@ function handleLineClick(id: string) {
                       无
                     </p>
                   </div>
-                  <div v-else custom-scrollbar pr-1 flex-1 overflow-y-auto space-y-1>
+                  <div v-else class="custom-scrollbar" pr-1 flex-1 overflow-y-auto space-y-1>
                     <div
                       v-for="line in hLines"
                       :key="line.id"
@@ -303,7 +303,7 @@ function handleLineClick(id: string) {
                       无
                     </p>
                   </div>
-                  <div v-else custom-scrollbar pr-1 flex-1 overflow-y-auto space-y-1>
+                  <div v-else class="custom-scrollbar" pr-1 flex-1 overflow-y-auto space-y-1>
                     <div
                       v-for="line in vLines"
                       :key="line.id"
@@ -395,16 +395,3 @@ function handleLineClick(id: string) {
     </div>
   </div>
 </template>
-
-<style scoped>
-.custom-scrollbar::-webkit-scrollbar {
-  width: 4px;
-}
-.custom-scrollbar::-webkit-scrollbar-thumb {
-  background: v-bind('isDark ? "#27272a" : "#e4e4e7"');
-  border-radius: 10px;
-}
-.custom-scrollbar::-webkit-scrollbar-thumb:hover {
-  background: v-bind('isDark ? "#3f3f46" : "#d4d4d8"');
-}
-</style>

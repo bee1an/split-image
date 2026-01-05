@@ -7,9 +7,34 @@ import {
 } from 'unocss'
 
 export default defineConfig({
-  shortcuts: [
-    ['btn', 'px-4 py-1 rounded inline-block bg-teal-600 text-white cursor-pointer hover:bg-teal-700 disabled:cursor-default disabled:bg-gray-600 disabled:opacity-50'],
-    ['icon-btn', 'text-[0.9em] inline-block cursor-pointer select-none opacity-75 transition duration-200 ease-in-out hover:opacity-100 hover:text-teal-600'],
+  preflights: [
+    {
+      getCSS: () => `
+.custom-scrollbar::-webkit-scrollbar {
+  width: 4px;
+  height: 4px;
+}
+.custom-scrollbar::-webkit-scrollbar-track {
+  background: transparent;
+}
+.custom-scrollbar::-webkit-scrollbar-thumb {
+  background: #e4e4e7;
+  border-radius: 10px;
+}
+.custom-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: #d4d4d8;
+}
+.dark .custom-scrollbar::-webkit-scrollbar-thumb {
+  background: #27272a;
+}
+.dark .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: #3f3f46;
+}
+.onscreen-scrollbar {
+  scrollbar-gutter: stable;
+}
+      `,
+    },
   ],
   presets: [
     presetWind4(),

@@ -16,10 +16,6 @@ import { toggleDark } from './composables/dark'
 
     <!-- Navigation Rail -->
     <nav border-l="zinc-200 dark:zinc-800" py-4 bg-white flex flex-col gap-4 w-16 shadow-lg shadow-zinc-200 items-center dark:bg-zinc-900 dark:shadow-none>
-      <div mb-4 rounded-xl bg-emerald-600 flex h-10 w-10 shadow="lg emerald-500/20" items-center justify-center>
-        <div i-carbon-grid text-xl text-white />
-      </div>
-
       <RouterLink
         v-slot="{ isActive }"
         to="/"
@@ -36,7 +32,7 @@ import { toggleDark } from './composables/dark'
 
       <RouterLink
         v-slot="{ isActive }"
-        to="/prepare"
+        to="/process"
         class="nav-item"
         title="后期处理"
       >

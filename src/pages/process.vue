@@ -18,6 +18,7 @@ const {
 
 const processExpansion = ref(0)
 const processPadding = ref(0)
+const enableTrimMargins = ref(true)
 const isProcessing = ref(false)
 const selectedIds = ref<Set<string>>(new Set())
 
@@ -93,7 +94,7 @@ async function processSingleImage(item: any) {
         const processedSrc = processWhiteBackgroundImage(img, {
           colorDistance: 30, // Default fixed tolerance
           padding: processPadding.value,
-          trimMargins: true,
+          trimMargins: enableTrimMargins.value,
           selection: item.selection,
           expansion: processExpansion.value,
         })
@@ -271,7 +272,7 @@ async function handleDownloadBatch() {
               </div>
             </div>
 
-            <div custom-scrollbar onscreen-scrollbar pb-2 flex gap-4 min-w-0 overflow-x-auto>
+            <div class="custom-scrollbar" onscreen-scrollbar pb-2 flex gap-4 min-w-0 overflow-x-auto>
               <div
                 v-for="(item, idx) in items"
                 :key="item.id"
@@ -324,7 +325,7 @@ async function handleDownloadBatch() {
 
       <!-- Sidebar Controls -->
       <aside border-l="zinc-200 dark:zinc-800" bg-white flex flex-col w-80 shadow-md shadow-zinc-200 overflow-hidden dark:bg-zinc-950 dark:shadow-none>
-        <div custom-scrollbar onscreen-scrollbar p-4 flex flex-1 flex-col gap-6 overflow-y-auto>
+        <div class="custom-scrollbar" onscreen-scrollbar p-4 flex flex-1 flex-col gap-6 overflow-y-auto>
           <section>
             <h3 text="[10px]" text-zinc-500 tracking-wider font-bold mb-3 uppercase>
               导入素材
@@ -361,9 +362,18 @@ async function handleDownloadBatch() {
                 <div space-y-3>
                   <div flex items-center justify-between>
                     <label text="[10px] zinc-500 dark:zinc-400">自动裁剪空白</label>
-                    <span text="[10px] zinc-400">已开启</span>
+                    <button
+                      p-0.5 rounded-full h-5 w-9 cursor-pointer transition-colors
+                      :class="enableTrimMargins ? 'bg-emerald-500' : 'bg-zinc-300 dark:bg-zinc-700'"
+                      @click="enableTrimMargins = !enableTrimMargins"
+                    >
+                      <div
+                        rounded-full bg-white h-4 w-4 shadow-sm transition-transform
+                        :class="enableTrimMargins ? 'translate-x-4' : 'translate-x-0'"
+                      />
+                    </button>
                   </div>
-                  <div space-y-1.5>
+                  <div v-if="enableTrimMargins" space-y-1.5>
                     <label text="[9px] zinc-400 dark:zinc-500">内边距 (px)</label>
                     <div flex gap-2 items-center>
                       <input
