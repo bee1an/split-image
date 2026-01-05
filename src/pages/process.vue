@@ -184,7 +184,7 @@ async function handleDownloadBatch() {
 
         <div v-else flex flex-col gap-6 h-full overflow-hidden>
           <!-- Hero Preview -->
-          <div v-if="currentItem" flex flex-1 min-h-0 items-center justify-center relative>
+          <div v-if="currentItem" flex flex-1 items-center justify-center relative>
             <div
               ref="previewRef"
               class="bg-checkered group/canvas rounded-xl cursor-crosshair select-none shadow-2xl relative overflow-hidden"

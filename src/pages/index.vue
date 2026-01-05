@@ -3,18 +3,13 @@ import type { ImageFormat, SplitLine } from '../utils/splitImage'
 import ImageCanvas from '../components/ImageCanvas.vue'
 import UploadZone from '../components/UploadZone.vue'
 
-import { useImageState } from '../composables/image'
+// Single image state (split tool only handles one image)
 import { generateId } from '../utils/common'
 import { downloadAsZip } from '../utils/downloadZip'
 import { splitImage } from '../utils/splitImage'
 
-const {
-  items,
-  currentIndex,
-  imageSrc,
-  addImages,
-  clearImages: resetImage,
-} = useImageState()
+const imageSrc = ref('')
+const imageName = ref('')
 const splitLines = ref<SplitLine[]>([])
 const isExporting = ref(false)
 const canvasRef = ref<InstanceType<typeof ImageCanvas>>()
@@ -44,17 +39,19 @@ const vLines = computed(() =>
 )
 
 async function handleUpload(files: File[]) {
-  const newFiles = await Promise.all(
-    files.map(async (file) => {
-      const src = await new Promise<string>((resolve) => {
-        const reader = new FileReader()
-        reader.onload = e => resolve(e.target?.result as string)
-        reader.readAsDataURL(file)
-      })
-      return { name: file.name, src }
-    }),
-  )
-  addImages(newFiles)
+  // Only take the first file for split tool
+  const file = files[0]
+  if (!file)
+    return
+
+  const src = await new Promise<string>((resolve) => {
+    const reader = new FileReader()
+    reader.onload = e => resolve(e.target?.result as string)
+    reader.readAsDataURL(file)
+  })
+
+  imageSrc.value = src
+  imageName.value = file.name.replace(/\.[^/.]+$/, '')
   splitLines.value = []
   quickHLines.value = 0
   quickVLines.value = 0
@@ -78,7 +75,7 @@ async function handleExport() {
       format: exportFormat.value,
       quality: exportQuality.value,
     })
-    await downloadAsZip(blobs, 'image', splitLines.value, exportFormat.value)
+    await downloadAsZip(blobs, imageName.value || 'image', splitLines.value, exportFormat.value)
   }
   catch (error) {
     console.error('导出失败:', error)
@@ -91,7 +88,8 @@ async function handleExport() {
 }
 
 function handleClear() {
-  resetImage()
+  imageSrc.value = ''
+  imageName.value = ''
   splitLines.value = []
   quickHLines.value = 0
   quickVLines.value = 0
@@ -175,39 +173,33 @@ function handleLineClick(id: string) {
             <h3 text="[10px]" text-zinc-500 tracking-wider font-bold mb-3 uppercase>
               原始图片
             </h3>
-            <UploadZone @upload="handleUpload" />
-
-            <!-- Gallery switcher in index page -->
-            <div v-if="items.length > 1" class="custom-scrollbar" mt-4 px-1 gap-2 grid grid-cols-4 max-h-48 overflow-y-auto>
-              <div
-                v-for="(item, idx) in items"
-                :key="item.id"
-                class="border-2 rounded aspect-square cursor-pointer transition-all relative overflow-hidden"
-                :class="currentIndex === idx ? 'border-emerald-500 shadow-sm' : 'border-transparent'"
-                @click="currentIndex = idx"
-              >
-                <img :src="item.processedSrc" class="h-full w-full object-cover">
-              </div>
-            </div>
-
-            <div v-if="imageSrc" border="1 zinc-200 dark:zinc-800" group mt-4 rounded-lg bg-white aspect-video relative overflow-hidden dark:bg-zinc-900>
-              <img :src="imageSrc" h-full w-full transition-opacity object-contain class="bg-checkered">
-              <div opacity-0 flex transition-opacity items-center inset-0 justify-center absolute group-hover="opacity-100 backdrop-blur-sm" bg="group-hover:zinc-900/50">
-                <div flex flex-col gap-2>
-                  <button
-                    border="1 zinc-200" text-xs text-zinc-900 font-semibold px-4 py-2 rounded-md bg-zinc-100 shadow-xl transition-transform dark:text-zinc-100 dark:bg-zinc-800 active:scale-95 hover:scale-105
-                    @click="handleClear"
-                  >
-                    更换图片
-                  </button>
-                  <RouterLink
-                    to="/process"
-                    border="1 emerald-500/30" text-xs text-emerald-400 font-semibold px-4 py-2 text-center rounded-md bg="emerald-500/10" shadow-xl transition-transform hover:bg="emerald-500/20" active:scale-95 hover:scale-105
-                  >
-                    去后期处理
-                  </RouterLink>
+            <UploadZone v-if="!imageSrc" :multiple="false" @upload="handleUpload" />
+            <div v-else flex flex-col gap-2>
+              <div border="1 zinc-200 dark:zinc-800" px-3 py-2 rounded-lg flex items-center justify-between bg="zinc-50 dark:zinc-900/50">
+                <div flex gap-2 min-w-0 items-center>
+                  <span i-carbon-image text-zinc-400 />
+                  <span text-xs text-zinc-600 truncate dark:text-zinc-400>{{ imageName || '已加载图片' }}</span>
                 </div>
+                <button
+                  text="[10px] red-500" font-medium flex-shrink-0 hover:underline
+                  @click="handleClear"
+                >
+                  移除
+                </button>
               </div>
+              <label
+                border="1 dashed zinc-300 dark:zinc-700"
+                text-xs text-zinc-500 font-medium px-3 py-2.5 text-center rounded-lg flex gap-1.5 cursor-pointer transition-colors items-center justify-center hover:border-emerald-500
+              >
+                <span i-carbon-upload text-sm />
+                更换图片
+                <input
+                  type="file"
+                  accept="image/*"
+                  hidden
+                  @change="(e) => { const f = (e.target as HTMLInputElement).files?.[0]; if (f) handleUpload([f]) }"
+                >
+              </label>
             </div>
           </section>
 
@@ -252,7 +244,7 @@ function handleLineClick(id: string) {
 
             <!-- Split Lines Section - Separated by type -->
             <section flex flex-1 flex-col gap-4 min-h-0>
-              <div flex-1 gap-3 grid grid-cols-2 min-h-0>
+              <div flex-1 gap-3 grid grid-cols-2>
                 <!-- Horizontal Lines -->
                 <div flex flex-col min-h-0>
                   <h3 text="[10px]" text-zinc-500 tracking-wider font-bold mb-2 py-1 bg-zinc-50 flex gap-2 uppercase items-center top-0 sticky z-20 dark:bg-zinc-950>

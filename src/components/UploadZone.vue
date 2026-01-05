@@ -1,4 +1,10 @@
 <script setup lang="ts">
+const props = withDefaults(defineProps<{
+  multiple?: boolean
+}>(), {
+  multiple: true,
+})
+
 const emit = defineEmits<{
   upload: [files: File[]]
 }>()
@@ -18,7 +24,10 @@ function handleDragLeave() {
 function handleDrop(e: DragEvent) {
   e.preventDefault()
   isDragging.value = false
-  const files = Array.from(e.dataTransfer?.files || []).filter(file => file.type.startsWith('image/'))
+  let files = Array.from(e.dataTransfer?.files || []).filter(file => file.type.startsWith('image/'))
+  if (!props.multiple && files.length > 0) {
+    files = [files[0]]
+  }
   if (files.length > 0) {
     emit('upload', files)
   }
@@ -30,7 +39,10 @@ function handleClick() {
 
 function handleFileChange(e: Event) {
   const target = e.target as HTMLInputElement
-  const files = Array.from(target.files || [])
+  let files = Array.from(target.files || [])
+  if (!props.multiple && files.length > 0) {
+    files = [files[0]]
+  }
   if (files.length > 0) {
     emit('upload', files)
     target.value = ''
@@ -60,7 +72,7 @@ function handleFileChange(e: Event) {
         导入素材
       </p>
       <p mt-1 text="[10px] zinc-500">
-        拖拽图片至此或点击浏览
+        {{ multiple ? '拖拽图片至此或点击浏览' : '拖拽或点击选择一张图片' }}
       </p>
     </div>
 
@@ -68,7 +80,7 @@ function handleFileChange(e: Event) {
       ref="fileInput"
       type="file"
       accept="image/*"
-      multiple
+      :multiple="multiple"
       hidden
       @change="handleFileChange"
     >
