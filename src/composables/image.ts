@@ -71,7 +71,10 @@ export const useImageState = createSharedComposable(() => {
   }
 
   function resetToOriginal(id: string) {
-    updateItem(id, { processedSrc: items.value.find(i => i.id === id)!.originalSrc })
+    const item = items.value.find(i => i.id === id)
+    if (!item)
+      return
+    updateItem(id, { processedSrc: item.originalSrc })
   }
 
   return {

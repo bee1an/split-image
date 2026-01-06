@@ -11,6 +11,8 @@ export interface ExportOptions {
   format: ImageFormat
   /** Quality for JPEG/WebP (0-1), ignored for PNG */
   quality: number
+  onProgress?: (completed: number, total: number) => void
+  signal?: AbortSignal
 }
 
 interface SliceRegion {
@@ -90,12 +92,18 @@ export async function splitImage(
   options: ExportOptions = { format: 'png', quality: 0.92 },
 ): Promise<Blob[]> {
   const regions = calculateRegions(image.naturalWidth, image.naturalHeight, lines)
+    .filter(region => region.width > 0 && region.height > 0)
   const mimeType = getMimeType(options.format)
   const quality = options.format === 'png' ? undefined : options.quality
 
   const blobs: Blob[] = []
+  const total = regions.length
+  let completed = 0
 
   for (const region of regions) {
+    if (options.signal?.aborted) {
+      throw new Error('Export aborted')
+    }
     const canvas = document.createElement('canvas')
     canvas.width = region.width
     canvas.height = region.height
@@ -125,6 +133,9 @@ export async function splitImage(
     })
 
     blobs.push(blob)
+    completed += 1
+    options.onProgress?.(completed, total)
+    await new Promise<void>(resolve => requestAnimationFrame(() => resolve()))
   }
 
   return blobs

@@ -6,6 +6,7 @@ import UploadZone from '../components/UploadZone.vue'
 import { useTempFolder } from '../composables/tempFolder'
 import { generateId } from '../utils/common'
 import { downloadAsZip } from '../utils/downloadZip'
+import { blobToDataURL } from '../utils/fileConverter'
 import { splitImage } from '../utils/splitImage'
 
 // Single image state (split tool only handles one image)
@@ -13,6 +14,7 @@ const imageSrc = ref('')
 const imageName = ref('')
 const splitLines = ref<SplitLine[]>([])
 const isExporting = ref(false)
+const isAddingToTemp = ref(false)
 const canvasRef = ref<InstanceType<typeof ImageCanvas>>()
 const exportButtonRef = ref<HTMLButtonElement>()
 
@@ -24,6 +26,9 @@ const quickVLines = ref(0)
 // Export options
 const exportFormat = ref<ImageFormat>('png')
 const exportQuality = ref(0.92)
+const exportProgress = ref({ completed: 0, total: 0 })
+const exportController = ref<AbortController | null>(null)
+const isBusy = computed(() => isExporting.value || isAddingToTemp.value)
 
 // Line interaction state
 const selectedLineId = ref<string | null>(null)
@@ -68,24 +73,38 @@ async function handleExport() {
     return
 
   isExporting.value = true
+  exportProgress.value = { completed: 0, total: 0 }
+  const controller = new AbortController()
+  exportController.value = controller
   try {
     // Play animation before export
     if (exportButtonRef.value && canvasRef.value?.playExportAnimation) {
       await canvasRef.value.playExportAnimation(exportButtonRef.value)
     }
+    if (controller.signal.aborted)
+      return
 
     const blobs = await splitImage(image, splitLines.value, {
       format: exportFormat.value,
       quality: exportQuality.value,
+      signal: controller.signal,
+      onProgress: (completed, total) => {
+        exportProgress.value = { completed, total }
+      },
     })
 
     await downloadAsZip(blobs, imageName.value || 'image', splitLines.value, exportFormat.value)
   }
   catch (error) {
+    if (error instanceof Error && error.message === 'Export aborted') {
+      return
+    }
     console.error('导出失败:', error)
   }
   finally {
     isExporting.value = false
+    exportController.value = null
+    exportProgress.value = { completed: 0, total: 0 }
     canvasRef.value?.draw()
   }
 }
@@ -95,7 +114,7 @@ async function handleAddToTemp() {
   if (!image || !imageSrc.value)
     return
 
-  isExporting.value = true
+  isAddingToTemp.value = true
   try {
     const blobs = await splitImage(image, splitLines.value, {
       format: exportFormat.value,
@@ -119,16 +138,12 @@ async function handleAddToTemp() {
     console.error('添加到临时文件夹失败:', error)
   }
   finally {
-    isExporting.value = false
+    isAddingToTemp.value = false
   }
 }
 
-function blobToDataURL(blob: Blob): Promise<string> {
-  return new Promise((resolve) => {
-    const reader = new FileReader()
-    reader.onload = () => resolve(reader.result as string)
-    reader.readAsDataURL(blob)
-  })
+function cancelExport() {
+  exportController.value?.abort()
 }
 
 function handleClear() {
@@ -376,6 +391,13 @@ function handleLineClick(id: string) {
             <div flex flex-col>
               <span text="[10px] zinc-400 dark:zinc-500" font-bold uppercase>输出预览</span>
               <span text-sm text-zinc-900 font-bold dark:text-zinc-100>{{ pieceCount }} 张切片</span>
+              <span
+                v-if="isExporting && exportProgress.total > 0"
+                text="[10px] zinc-400 dark:zinc-500"
+                font-medium
+              >
+                {{ exportProgress.completed }}/{{ exportProgress.total }}
+              </span>
             </div>
             <div text-emerald-600 p-1.5 rounded-full bg-white flex h-8 w-8 shadow-sm items-center justify-center dark:text-emerald-400 dark:bg-zinc-800>
               <span i-carbon-grid text-lg block />
@@ -418,7 +440,7 @@ function handleLineClick(id: string) {
           <div flex gap-2>
             <button
               border="1 zinc-200 dark:zinc-700" hover:bg="zinc-100 dark:zinc-800" text-xs text-zinc-600 font-bold py-3 rounded-xl flex-1 transition-colors dark:text-zinc-400 disabled:opacity-50
-              :disabled="isExporting || splitLines.length === 0"
+              :disabled="isBusy || splitLines.length === 0"
               @click="handleAddToTemp"
             >
               <div flex gap-1.5 items-center justify-center>
@@ -430,12 +452,12 @@ function handleLineClick(id: string) {
               ref="exportButtonRef"
               shadow="xl emerald-500/10" active:scale="[0.98]"
               text-xs text-white font-bold py-3 rounded-xl bg-emerald-600 flex flex-1 gap-1.5 cursor-pointer transition-all items-center justify-center hover:bg-emerald-500 disabled:opacity-50
-              :disabled="isExporting || splitLines.length === 0"
-              @click="handleExport"
+              :disabled="splitLines.length === 0 || isAddingToTemp"
+              @click="isExporting ? cancelExport() : handleExport()"
             >
-              <span v-if="isExporting" i-carbon-rotate-360 animate-spin />
+              <span v-if="isExporting" i-carbon-close />
               <span v-else i-carbon-download />
-              <span>下载 ZIP</span>
+              <span>{{ isExporting ? '取消导出' : '下载 ZIP' }}</span>
             </button>
           </div>
         </div>

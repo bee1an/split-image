@@ -34,8 +34,8 @@ const displaySize = computed(() => {
     return { width: 0, height: 0 }
   }
 
-  const ratioW = (contW - 64) / natW
-  const ratioH = (contH - 64) / natH
+  const ratioW = (contW - CANVAS_CONSTANTS.CANVAS_MARGIN) / natW
+  const ratioH = (contH - CANVAS_CONSTANTS.CANVAS_MARGIN) / natH
   const ratio = Math.min(ratioW, ratioH, 1)
 
   return {
@@ -46,6 +46,7 @@ const displaySize = computed(() => {
 
 const draggingLineId = ref<string | null>(null)
 const creatingLine = ref<{ type: 'h' | 'v', position: number } | null>(null)
+const linePositionBounds = { min: 1, max: 99 }
 
 /**
  * 绘制分割线的路径
@@ -176,7 +177,7 @@ function handleMouseMove(e: MouseEvent) {
     const line = lines.value.find(l => l.id === draggingLineId.value)
     if (line) {
       const newPosition = line.type === 'h' ? pos.yPercent : pos.xPercent
-      line.position = clamp(newPosition, 0, 100)
+      line.position = clamp(newPosition, linePositionBounds.min, linePositionBounds.max)
       updateLines([...lines.value])
       draw()
       cursorStyle.value = line.type === 'h' ? 'row-resize' : 'col-resize'
@@ -204,7 +205,7 @@ function handleMouseMove(e: MouseEvent) {
 function handleMouseUp() {
   if (creatingLine.value) {
     const pos = creatingLine.value.position
-    if (pos > 1 && pos < 99) {
+    if (pos > linePositionBounds.min && pos < linePositionBounds.max) {
       const newLine: SplitLine = {
         id: generateId(),
         type: creatingLine.value.type,
@@ -258,21 +259,21 @@ function handleKeyDown(e: KeyboardEvent) {
 
   if (line.type === 'h') {
     if (e.key === 'ArrowUp') {
-      line.position = clamp(line.position - pixelStepH, 0, 100)
+      line.position = clamp(line.position - pixelStepH, linePositionBounds.min, linePositionBounds.max)
       moved = true
     }
     else if (e.key === 'ArrowDown') {
-      line.position = clamp(line.position + pixelStepH, 0, 100)
+      line.position = clamp(line.position + pixelStepH, linePositionBounds.min, linePositionBounds.max)
       moved = true
     }
   }
   else {
     if (e.key === 'ArrowLeft') {
-      line.position = clamp(line.position - pixelStepV, 0, 100)
+      line.position = clamp(line.position - pixelStepV, linePositionBounds.min, linePositionBounds.max)
       moved = true
     }
     else if (e.key === 'ArrowRight') {
-      line.position = clamp(line.position + pixelStepV, 0, 100)
+      line.position = clamp(line.position + pixelStepV, linePositionBounds.min, linePositionBounds.max)
       moved = true
     }
   }
@@ -434,7 +435,7 @@ defineExpose({
 
 // Animation: split pieces fly to target
 interface AnimatedPiece {
-  img: ImageData
+  canvas: HTMLCanvasElement
   startX: number
   startY: number
   width: number
@@ -483,9 +484,14 @@ async function playExportAnimation(targetElement: HTMLElement): Promise<void> {
 
       if (w > 0 && h > 0) {
         const imgData = offCtx.getImageData(x, y, w, h)
+        const pieceCanvas = document.createElement('canvas')
+        pieceCanvas.width = w
+        pieceCanvas.height = h
+        const pieceCtx = pieceCanvas.getContext('2d')!
+        pieceCtx.putImageData(imgData, 0, 0)
         // Convert to viewport coordinates
         pieces.push({
-          img: imgData,
+          canvas: pieceCanvas,
           startX: canvasRect.left + x,
           startY: canvasRect.top + y,
           width: w,
@@ -525,12 +531,7 @@ async function playExportAnimation(targetElement: HTMLElement): Promise<void> {
         if (pieceElapsed < 0) {
           allDone = false
           // Draw piece at original position
-          const tempCanvas = document.createElement('canvas')
-          tempCanvas.width = piece.width
-          tempCanvas.height = piece.height
-          const tempCtx = tempCanvas.getContext('2d')!
-          tempCtx.putImageData(piece.img, 0, 0)
-          animCtx.drawImage(tempCanvas, piece.startX, piece.startY)
+          animCtx.drawImage(piece.canvas, piece.startX, piece.startY)
           continue
         }
 
@@ -560,17 +561,11 @@ async function playExportAnimation(targetElement: HTMLElement): Promise<void> {
         const opacity = t > 0.8 ? 1 - (t - 0.8) / 0.2 : 1
 
         // Draw piece
-        const tempCanvas = document.createElement('canvas')
-        tempCanvas.width = piece.width
-        tempCanvas.height = piece.height
-        const tempCtx = tempCanvas.getContext('2d')!
-        tempCtx.putImageData(piece.img, 0, 0)
-
         animCtx.save()
         animCtx.globalAlpha = opacity
         animCtx.translate(currentX + (piece.width * scale) / 2, finalY + (piece.height * scale) / 2)
         animCtx.scale(scale, scale)
-        animCtx.drawImage(tempCanvas, -piece.width / 2, -piece.height / 2)
+        animCtx.drawImage(piece.canvas, -piece.width / 2, -piece.height / 2)
         animCtx.restore()
       }
 

@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import type { EraserPoint, EraserStroke } from '../composables/image'
+import ConfirmDialog from '../components/ConfirmDialog.vue'
 import UploadZone from '../components/UploadZone.vue'
 import { useImageState } from '../composables/image'
 import { useTempFolder } from '../composables/tempFolder'
@@ -24,8 +25,33 @@ const enableTrimMargins = ref(true)
 const isProcessing = ref(false)
 const selectedIds = ref<Set<string>>(new Set())
 const eraserRadius = ref(3) // Percentage of image size
+const processController = ref<AbortController | null>(null)
 
 const { addFiles, open: openTempFolder } = useTempFolder()
+const confirmDialog = ref<{ open: boolean, mode: 'single' | 'batch', targetId: string }>({
+  open: false,
+  mode: 'single',
+  targetId: '',
+})
+
+const confirmTitle = computed(() => (confirmDialog.value.mode === 'single' ? '删除图片' : '删除选中'))
+const confirmDescription = computed(() =>
+  confirmDialog.value.mode === 'single'
+    ? '确定删除该图片吗？此操作无法撤销。'
+    : '确定删除选中的图片吗？此操作无法撤销。',
+)
+
+watch(
+  () => items.value.map(item => item.id),
+  (ids) => {
+    const idSet = new Set(ids)
+    for (const id of selectedIds.value) {
+      if (!idSet.has(id)) {
+        selectedIds.value.delete(id)
+      }
+    }
+  },
+)
 
 // Eraser Interaction
 const previewRef = ref<HTMLDivElement>()
@@ -123,9 +149,14 @@ function handleEraserStart(e: MouseEvent) {
       })
 
       // Apply eraser stroke only (erase white in stroke area)
+      const controller = createProcessController()
       isProcessing.value = true
-      await applyEraserStroke(currentItem.value, newStroke)
-      isProcessing.value = false
+      await new Promise<void>(resolve => requestAnimationFrame(() => resolve()))
+      await applyEraserStroke(currentItem.value, newStroke, controller.signal)
+      if (!controller.signal.aborted) {
+        isProcessing.value = false
+      }
+      processController.value = null
     }
     currentStroke.value = []
   }
@@ -155,6 +186,7 @@ async function handleUpload(files: File[]) {
 async function applyEraserStroke(
   item: typeof currentItem.value,
   stroke: EraserStroke,
+  signal?: AbortSignal,
 ) {
   if (!item || stroke.points.length === 0)
     return
@@ -164,6 +196,10 @@ async function applyEraserStroke(
     img.crossOrigin = 'anonymous'
     img.onload = () => {
       try {
+        if (signal?.aborted) {
+          resolve()
+          return
+        }
         const canvas = document.createElement('canvas')
         canvas.width = img.naturalWidth
         canvas.height = img.naturalHeight
@@ -175,7 +211,9 @@ async function applyEraserStroke(
         eraseWhiteInStrokes(imageData, [stroke], 30, processExpansion.value)
         ctx.putImageData(imageData, 0, 0)
 
-        updateProcessedSrc(item.id, canvas.toDataURL('image/png'))
+        if (!signal?.aborted) {
+          updateProcessedSrc(item.id, canvas.toDataURL('image/png'))
+        }
         resolve()
       }
       catch (error) {
@@ -191,6 +229,7 @@ async function applyEraserStroke(
 async function processSingleImage(
   item: typeof currentItem.value,
   eraserStrokesOverride?: typeof currentItem.value extends null ? never : NonNullable<typeof currentItem.value>['eraserStrokes'],
+  signal?: AbortSignal,
 ) {
   if (!item)
     return
@@ -199,6 +238,10 @@ async function processSingleImage(
     img.crossOrigin = 'anonymous'
     img.onload = () => {
       try {
+        if (signal?.aborted) {
+          resolve()
+          return
+        }
         const processedSrc = processWhiteBackgroundImage(img, {
           colorDistance: 30, // Default fixed tolerance
           padding: processPadding.value,
@@ -206,7 +249,9 @@ async function processSingleImage(
           eraserStrokes: eraserStrokesOverride ?? item.eraserStrokes,
           expansion: processExpansion.value,
         })
-        updateProcessedSrc(item.id, processedSrc)
+        if (!signal?.aborted) {
+          updateProcessedSrc(item.id, processedSrc)
+        }
         resolve()
       }
       catch (error) {
@@ -221,10 +266,15 @@ async function processSingleImage(
 async function handleApplyCurrent() {
   if (!currentItem.value)
     return
+  const controller = createProcessController()
   isProcessing.value = true
-  await processSingleImage(currentItem.value)
-  selectedIds.value.add(currentItem.value.id)
-  isProcessing.value = false
+  await new Promise<void>(resolve => requestAnimationFrame(() => resolve()))
+  await processSingleImage(currentItem.value, undefined, controller.signal)
+  if (!controller.signal.aborted) {
+    selectedIds.value.add(currentItem.value.id)
+    isProcessing.value = false
+  }
+  processController.value = null
 }
 
 function toggleSelect(id: string) {
@@ -243,6 +293,46 @@ function toggleSelectAll() {
   else {
     selectedIds.value = new Set(items.value.map(i => i.id))
   }
+}
+
+function openRemoveImage(id: string) {
+  confirmDialog.value = { open: true, mode: 'single', targetId: id }
+}
+
+function openRemoveSelected() {
+  confirmDialog.value = { open: true, mode: 'batch', targetId: '' }
+}
+
+function handleConfirmRemove() {
+  if (confirmDialog.value.mode === 'single') {
+    const { targetId } = confirmDialog.value
+    if (targetId) {
+      removeImage(targetId)
+      selectedIds.value.delete(targetId)
+    }
+  }
+  else {
+    selectedIds.value.forEach(id => removeImage(id))
+    selectedIds.value.clear()
+  }
+  confirmDialog.value.open = false
+}
+
+function handleCancelRemove() {
+  confirmDialog.value.open = false
+}
+
+function createProcessController() {
+  processController.value?.abort()
+  const controller = new AbortController()
+  processController.value = controller
+  return controller
+}
+
+function cancelProcessing() {
+  processController.value?.abort()
+  processController.value = null
+  isProcessing.value = false
 }
 
 async function handleDownloadBatch() {
@@ -310,7 +400,7 @@ async function handleAddSelectedToTemp() {
           <div v-if="currentItem" flex flex-1 items-center justify-center relative>
             <div
               ref="previewRef"
-              class="group/canvas bg-checkered rounded-xl cursor-crosshair select-none shadow-2xl relative overflow-hidden"
+              class="bg-checkered group/canvas rounded-xl cursor-crosshair select-none shadow-2xl relative overflow-hidden"
               @mousedown="handleEraserStart"
             >
               <img :src="imageSrc" class="max-h-[60vh] w-auto block pointer-events-none object-contain">
@@ -344,7 +434,7 @@ async function handleAddSelectedToTemp() {
                 bg="white dark:zinc-800" border="1 zinc-200 dark:zinc-700"
                 p-3 rounded-full shadow-xl transition-all active:scale-90 hover:scale-110
                 title="彻底删除"
-                @click="removeImage(currentItem.id)"
+                @click="openRemoveImage(currentItem.id)"
               >
                 <div i-carbon-trash-can text-red-500 />
               </button>
@@ -369,7 +459,7 @@ async function handleAddSelectedToTemp() {
               <div v-if="selectedIds.size > 0" flex gap-4>
                 <button
                   text="[10px] red-500" font-bold hover:underline
-                  @click="selectedIds.forEach(id => removeImage(id)); selectedIds.clear()"
+                  @click="openRemoveSelected"
                 >
                   删除选中
                 </button>
@@ -380,10 +470,11 @@ async function handleAddSelectedToTemp() {
               <div
                 v-for="(item, idx) in items"
                 :key="item.id"
-                class="group border-2 rounded-lg flex-shrink-0 h-24 w-24 cursor-pointer transition-all relative overflow-hidden"
+                overflow-hidden
+                class="group border-2 rounded-lg flex-shrink-0 h-24 w-24 cursor-pointer transition-all relative"
                 :class="[
                   currentIndex === idx ? 'border-emerald-500 shadow-lg' : 'border-transparent shadow-sm',
-                  selectedIds.has(item.id) ? 'ring-2 ring-emerald-500/50' : '',
+                  selectedIds.has(item.id) ? 'border-emerald' : '',
                 ]"
                 @click="currentIndex = idx"
               >
@@ -418,7 +509,8 @@ async function handleAddSelectedToTemp() {
               <label
                 for="gallery-upload"
                 border="2 dashed zinc-300 dark:zinc-800"
-                bg="zinc-50/50 dark:zinc-900/30" class="hover:border-emerald-500" rounded-lg flex flex-shrink-0 h-24 w-24 cursor-pointer transition-all items-center justify-center
+                bg="zinc-50/50 dark:zinc-900/30" rounded-lg flex flex-shrink-0 h-24 w-24 cursor-pointer transition-all items-center justify-center
+                class="hover:border-emerald-500"
               >
                 <div i-carbon-add text-zinc-400 />
               </label>
@@ -441,7 +533,16 @@ async function handleAddSelectedToTemp() {
             <section border="1 zinc-200 dark:zinc-800" bg="white dark:zinc-900/50" p-4 rounded-xl shadow-sm>
               <h3 text="[10px]" text-zinc-500 tracking-wider font-bold mb-4 flex uppercase items-center justify-between>
                 智能去白底
-                <span v-if="isProcessing" i-carbon-progress-bar-round text-emerald-500 animate-spin />
+                <div flex gap-2 items-center>
+                  <span v-if="isProcessing" i-carbon-progress-bar-round text-emerald-500 animate-spin />
+                  <button
+                    v-if="isProcessing"
+                    text="[10px] zinc-500" font-bold hover:underline
+                    @click="cancelProcessing"
+                  >
+                    取消
+                  </button>
+                </div>
               </h3>
               <div space-y-6>
                 <!-- Eraser Brush Size -->
@@ -551,5 +652,15 @@ async function handleAddSelectedToTemp() {
         </div>
       </aside>
     </div>
+
+    <ConfirmDialog
+      :open="confirmDialog.open"
+      :title="confirmTitle"
+      :description="confirmDescription"
+      confirm-text="删除"
+      cancel-text="取消"
+      @confirm="handleConfirmRemove"
+      @cancel="handleCancelRemove"
+    />
   </div>
 </template>

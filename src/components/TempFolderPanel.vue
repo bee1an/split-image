@@ -20,6 +20,14 @@ const panelPosition = ref<Position>({
 const panelDragOffset = ref<Position>({ x: 0, y: 0 })
 const isPanelDragging = ref(false)
 
+// Button drag state
+const buttonRef = ref<HTMLDivElement>()
+const buttonPosition = ref<Position>({
+  x: DRAG_CONSTANTS.DEFAULT_PANEL_POSITION.x,
+  y: DRAG_CONSTANTS.DEFAULT_PANEL_POSITION.y,
+})
+const isButtonDragging = ref(false)
+
 // 面板拖拽
 const { startDrag: _startPanelDrag } = useDraggable({
   threshold: 0,
@@ -32,6 +40,7 @@ const { startDrag: _startPanelDrag } = useDraggable({
   },
   onDragMove: (_e, newPosition) => {
     panelPosition.value = newPosition
+    buttonPosition.value = newPosition
   },
   onDragEnd: () => {
     isPanelDragging.value = false
@@ -49,14 +58,6 @@ function startPanelDrag(e: MouseEvent) {
   _startPanelDrag(e)
 }
 
-// Button drag state
-const buttonRef = ref<HTMLDivElement>()
-const buttonPosition = ref<Position>({
-  x: DRAG_CONSTANTS.DEFAULT_PANEL_POSITION.x,
-  y: DRAG_CONSTANTS.DEFAULT_PANEL_POSITION.y,
-})
-const isButtonDragging = ref(false)
-
 // 按钮拖拽
 const { startDrag: startButtonDrag } = useDraggable({
   threshold: DRAG_CONSTANTS.THRESHOLD,
@@ -70,7 +71,7 @@ const { startDrag: startButtonDrag } = useDraggable({
     // 计算按钮位置（中心对齐鼠标，但会被边界限制）
     const viewportWidth = window.innerWidth
     const viewportHeight = window.innerHeight
-    const buttonSize = 48 // w-12 = 48px
+    const buttonSize = DRAG_CONSTANTS.BUTTON_SIZE
     const x = Math.max(0, Math.min(viewportWidth - buttonSize, e.clientX - DRAG_CONSTANTS.BUTTON_CENTER_OFFSET))
     const y = Math.max(0, Math.min(viewportHeight - buttonSize, e.clientY - DRAG_CONSTANTS.BUTTON_CENTER_OFFSET))
     buttonPosition.value = { x, y }
@@ -147,7 +148,7 @@ function handleFileDragEnd() {
           font-bold rounded-full bg-red-500 flex h-5 w-5 items-center right-0 top-0 justify-center absolute
           border="2 white dark:zinc-900"
         >
-          {{ files.length > TEMP_FOLDER_CONSTANTS.MAX_DISPLAY_COUNT ? `${TEMP_FOLDER_CONSTANTS.MAX_DISPLAY_COUNT}` : files.length }}
+          {{ files.length > TEMP_FOLDER_CONSTANTS.MAX_DISPLAY_COUNT ? `${TEMP_FOLDER_CONSTANTS.MAX_DISPLAY_COUNT}+` : files.length }}
         </span>
       </button>
     </div>
@@ -257,7 +258,7 @@ function handleFileDragEnd() {
                 text="[8px] white" font-bold px-1 py-0.5 rounded left-1 top-1 absolute
                 :class="file.source === 'split' ? 'bg-amber-500' : 'bg-emerald-500'"
               >
-                {{ file.source === 'split' ? '切' : '处' }}
+                {{ TEMP_FOLDER_CONSTANTS.SOURCE_LABELS[file.source] }}
               </div>
             </div>
           </div>

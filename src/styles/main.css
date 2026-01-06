@@ -1,9 +1,26 @@
+:root {
+  color-scheme: light dark;
+}
+
 html,
 body,
 #app {
   height: 100%;
   margin: 0;
+  background: #ffffff;
+}
+
+body {
+  overflow: hidden;
+}
+
+html.dark body {
   background: #09090b;
+}
+
+#app {
+  display: flex;
+  flex-direction: column;
 }
 
 .bg-checkered {
@@ -26,10 +43,21 @@ body,
     linear-gradient(-45deg, transparent 75%, #333 75%);
 }
 
-html.dark {
-  color-scheme: dark;
-}
-
 button {
   cursor: pointer;
+}
+
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: #27272a;
+  border-radius: 10px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #3f3f46;
 }
