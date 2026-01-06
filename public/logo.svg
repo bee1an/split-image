@@ -1,0 +1,33 @@
+<svg width="512" height="512" viewBox="0 0 512 512" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="grad" x1="0" y1="0" x2="512" y2="512" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#34D399"/> <!-- emerald-400 -->
+      <stop offset="1" stop-color="#059669"/> <!-- emerald-600 -->
+    </linearGradient>
+    <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="12" stdDeviation="16" flood-color="#064e3b" flood-opacity="0.2"/>
+    </filter>
+  </defs>
+
+  <g filter="url(#shadow)">
+    <!-- Left Bottom Piece -->
+    <path
+      d="M96 96 V416 H328 L208 96 H96 Z"
+      fill="url(#grad)"
+      stroke="url(#grad)"
+      stroke-width="24"
+      stroke-linejoin="round"
+      transform="translate(-24, 24)"
+    />
+
+    <!-- Right Top Piece -->
+    <path
+      d="M416 416 V96 H184 L304 416 H416 Z"
+      fill="url(#grad)"
+      stroke="url(#grad)"
+      stroke-width="24"
+      stroke-linejoin="round"
+      transform="translate(24, -24)"
+    />
+  </g>
+</svg>
