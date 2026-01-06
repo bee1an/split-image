@@ -21,12 +21,13 @@ import { toggleDark } from './composables/dark'
       <RouterLink
         v-slot="{ isActive }"
         to="/"
-        class="nav-item"
         title="切片工具"
       >
         <div
-          :class="isActive ? 'bg-emerald-500/10 text-emerald-500' : 'text-zinc-400 hover:bg-zinc-200 dark:hover:bg-zinc-800'"
           p-3 rounded-xl transition-all
+          :bg="isActive ? 'emerald-500/10' : undefined"
+          :text="isActive ? 'emerald-500' : 'zinc-400'"
+          :hover="isActive ? undefined : 'bg-zinc-200 dark:bg-zinc-800'"
         >
           <div i-carbon-cut text-xl />
         </div>
@@ -35,12 +36,13 @@ import { toggleDark } from './composables/dark'
       <RouterLink
         v-slot="{ isActive }"
         to="/process"
-        class="nav-item"
         title="后期处理"
       >
         <div
-          :class="isActive ? 'bg-emerald-500/10 text-emerald-500' : 'text-zinc-400 hover:bg-zinc-200 dark:hover:bg-zinc-800'"
           p-3 rounded-xl transition-all
+          :bg="isActive ? 'emerald-500/10' : undefined"
+          :text="isActive ? 'emerald-500' : 'zinc-400'"
+          :hover="isActive ? undefined : 'bg-zinc-200 dark:bg-zinc-800'"
         >
           <div i-carbon-image-search text-xl />
         </div>

@@ -22,20 +22,35 @@ const typeIcons: Record<NotificationType, string> = {
 <template>
   <Teleport to="body">
     <div
-      class="flex flex-col gap-2 w-80 right-4 top-4 fixed z-2000"
+      flex
+      flex-col
+      gap="2"
+      w="80"
+      right="4"
+      top="4"
+      fixed
+      z="2000"
       aria-live="polite"
       aria-atomic="true"
     >
-      <TransitionGroup name="toast" tag="div" class="flex flex-col gap-2">
+      <TransitionGroup name="toast" tag="div" flex flex-col gap="2">
         <div
           v-for="(notification, index) in notifications"
           :key="index"
-          class="px-3 py-2 border rounded-lg flex gap-2 shadow-lg items-start backdrop-blur"
+          px="3"
+          py="2"
+          border
+          rounded="lg"
+          flex
+          gap="2"
+          shadow="lg"
+          items-start
+          backdrop-blur
           :class="typeClasses[notification.type]"
           role="status"
         >
-          <span class="text-base" :class="typeIcons[notification.type]" />
-          <p class="text-sm leading-snug font-medium">
+          <span text="base" :class="typeIcons[notification.type]" />
+          <p text="sm" leading="snug" font-medium>
             {{ notification.message }}
           </p>
         </div>

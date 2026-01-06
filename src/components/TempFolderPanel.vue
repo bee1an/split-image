@@ -133,7 +133,7 @@ function handleFileDragEnd() {
       ref="buttonRef"
       select-none fixed z-1000
       :style="{ left: `${buttonPosition.x}px`, top: `${buttonPosition.y}px` }"
-      :class="isButtonDragging ? 'cursor-grabbing' : 'cursor-grab'"
+      :cursor="isButtonDragging ? 'grabbing' : 'grab'"
       @mousedown="startButtonDrag"
       @click="onButtonClick"
     >
@@ -167,7 +167,7 @@ function handleFileDragEnd() {
         bg="white dark:zinc-900"
         border="1 zinc-200 dark:zinc-800"
         :style="{ left: `${panelPosition.x}px`, top: `${panelPosition.y}px` }"
-        :class="{ 'cursor-grabbing': isPanelDragging, 'cursor-grab': !isPanelDragging }"
+        :cursor="isPanelDragging ? 'grabbing' : 'grab'"
         @mousedown="startPanelDrag"
       >
         <!-- Header -->
@@ -227,7 +227,7 @@ function handleFileDragEnd() {
               @dragstart="handleFileDragStart($event, file)"
               @dragend="handleFileDragEnd"
             >
-              <img :src="file.src" pointer-events-none class="bg-checkered w-full aspect-square object-cover">
+              <img :src="file.src" pointer-events-none class="bg-checkered" w="full" aspect="square" object="cover">
 
               <!-- Overlay -->
               <div
@@ -256,7 +256,7 @@ function handleFileDragEnd() {
               <!-- Source badge -->
               <div
                 text="[8px] white" font-bold px-1 py-0.5 rounded left-1 top-1 absolute
-                :class="file.source === 'split' ? 'bg-amber-500' : 'bg-emerald-500'"
+                :bg="file.source === 'split' ? 'amber-500' : 'emerald-500'"
               >
                 {{ TEMP_FOLDER_CONSTANTS.SOURCE_LABELS[file.source] }}
               </div>

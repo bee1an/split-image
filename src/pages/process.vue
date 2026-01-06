@@ -400,10 +400,17 @@ async function handleAddSelectedToTemp() {
           <div v-if="currentItem" flex flex-1 items-center justify-center relative>
             <div
               ref="previewRef"
-              class="bg-checkered group/canvas rounded-xl cursor-crosshair select-none shadow-2xl relative overflow-hidden"
+              class="bg-checkered"
+              group="canvas"
+              rounded="xl"
+              cursor="crosshair"
+              select-none
+              shadow="2xl"
+              relative
+              overflow-hidden
               @mousedown="handleEraserStart"
             >
-              <img :src="imageSrc" class="max-h-[60vh] w-auto block pointer-events-none object-contain">
+              <img :src="imageSrc" max-h="[60vh]" w="auto" block pointer-events="none" object="contain">
 
               <!-- Eraser Canvas Overlay -->
               <canvas
@@ -412,7 +419,18 @@ async function handleAddSelectedToTemp() {
               />
 
               <!-- Eraser Hint -->
-              <div v-if="!isDrawing" class="group-hover/canvas:opacity-100" bg="black/20" opacity-0 flex pointer-events-none transition-opacity items-center inset-0 justify-center absolute>
+              <div
+                v-if="!isDrawing"
+                bg="black/20"
+                opacity="0 group-hover/canvas:100"
+                flex
+                pointer-events="none"
+                transition-opacity
+                items-center
+                inset-0
+                justify-center
+                absolute
+              >
                 <div px-4 py-2 rounded-full bg-white flex gap-2 shadow-xl items-center backdrop-blur dark:bg-zinc-900>
                   <div i-carbon-paint-brush text-red-500 />
                   <span text-xs font-bold>拖拽涂抹以擦除白色</span>
@@ -470,15 +488,20 @@ async function handleAddSelectedToTemp() {
               <div
                 v-for="(item, idx) in items"
                 :key="item.id"
+                rounded="lg"
+                h="24"
+                w="24"
+                cursor="pointer"
+                group
+                flex-shrink-0
+                transition-all
+                relative
                 overflow-hidden
-                class="group border-2 rounded-lg flex-shrink-0 h-24 w-24 cursor-pointer transition-all relative"
-                :class="[
-                  currentIndex === idx ? 'border-emerald-500 shadow-lg' : 'border-transparent shadow-sm',
-                  selectedIds.has(item.id) ? 'border-emerald' : '',
-                ]"
+                :border="(currentIndex === idx || selectedIds.has(item.id)) ? '2 emerald-500' : '2 transparent'"
+                :shadow="currentIndex === idx ? 'lg' : 'sm'"
                 @click="currentIndex = idx"
               >
-                <img :src="item.processedSrc" class="bg-checkered h-full w-full object-cover">
+                <img :src="item.processedSrc" class="bg-checkered" h="full" w="full" object="cover">
 
                 <!-- Selection Overlay -->
                 <div
@@ -509,8 +532,17 @@ async function handleAddSelectedToTemp() {
               <label
                 for="gallery-upload"
                 border="2 dashed zinc-300 dark:zinc-800"
-                bg="zinc-50/50 dark:zinc-900/30" rounded-lg flex flex-shrink-0 h-24 w-24 cursor-pointer transition-all items-center justify-center
-                class="hover:border-emerald-500"
+                bg="zinc-50/50 dark:zinc-900/30"
+                rounded-lg
+                flex
+                flex-shrink-0
+                h="24"
+                w="24"
+                cursor="pointer"
+                transition-all
+                items-center
+                justify-center
+                hover="border-emerald-500"
               >
                 <div i-carbon-add text-zinc-400 />
               </label>
@@ -588,7 +620,7 @@ async function handleAddSelectedToTemp() {
                     <label text="[10px] zinc-500 dark:zinc-400">自动裁剪空白</label>
                     <button
                       p-0.5 rounded-full h-5 w-9 cursor-pointer transition-colors
-                      :class="enableTrimMargins ? 'bg-emerald-500' : 'bg-zinc-300 dark:bg-zinc-700'"
+                      :bg="enableTrimMargins ? 'emerald-500' : 'zinc-300 dark:zinc-700'"
                       @click="enableTrimMargins = !enableTrimMargins"
                     >
                       <div
