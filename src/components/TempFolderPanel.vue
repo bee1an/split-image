@@ -24,6 +24,8 @@ const isPanelDragging = ref(false)
 const { startDrag: _startPanelDrag } = useDraggable({
   threshold: 0,
   offset: panelDragOffset,
+  elementRef: panelRef,
+  constrainToViewport: true,
   excludeSelector: 'button, img, .no-drag',
   onDragStart: () => {
     isPanelDragging.value = true
@@ -48,6 +50,7 @@ function startPanelDrag(e: MouseEvent) {
 }
 
 // Button drag state
+const buttonRef = ref<HTMLDivElement>()
 const buttonPosition = ref<Position>({
   x: DRAG_CONSTANTS.DEFAULT_PANEL_POSITION.x,
   y: DRAG_CONSTANTS.DEFAULT_PANEL_POSITION.y,
@@ -57,16 +60,20 @@ const isButtonDragging = ref(false)
 // 按钮拖拽
 const { startDrag: startButtonDrag } = useDraggable({
   threshold: DRAG_CONSTANTS.THRESHOLD,
+  elementRef: buttonRef,
+  constrainToViewport: true,
   onDragStart: () => {
     isButtonDragging.value = true
     isTempFileDragging.value = true
   },
   onDragMove: (e) => {
-    // 计算按钮位置（中心对齐鼠标）
-    buttonPosition.value = {
-      x: e.clientX - DRAG_CONSTANTS.BUTTON_CENTER_OFFSET,
-      y: e.clientY - DRAG_CONSTANTS.BUTTON_CENTER_OFFSET,
-    }
+    // 计算按钮位置（中心对齐鼠标，但会被边界限制）
+    const viewportWidth = window.innerWidth
+    const viewportHeight = window.innerHeight
+    const buttonSize = 48 // w-12 = 48px
+    const x = Math.max(0, Math.min(viewportWidth - buttonSize, e.clientX - DRAG_CONSTANTS.BUTTON_CENTER_OFFSET))
+    const y = Math.max(0, Math.min(viewportHeight - buttonSize, e.clientY - DRAG_CONSTANTS.BUTTON_CENTER_OFFSET))
+    buttonPosition.value = { x, y }
     // 同步面板位置
     panelPosition.value = buttonPosition.value
   },
@@ -122,6 +129,7 @@ function handleFileDragEnd() {
     <!-- Floating Button (always visible when closed) -->
     <div
       v-if="!isOpen"
+      ref="buttonRef"
       select-none fixed z-1000
       :style="{ left: `${buttonPosition.x}px`, top: `${buttonPosition.y}px` }"
       :class="isButtonDragging ? 'cursor-grabbing' : 'cursor-grab'"

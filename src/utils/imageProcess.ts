@@ -9,11 +9,14 @@ export interface TrimBounds {
   height: number
 }
 
-export interface Selection {
-  x: number // Percent (0-100)
-  y: number
-  w: number
-  h: number
+export interface EraserPoint {
+  x: number // Percentage (0-100)
+  y: number // Percentage (0-100)
+}
+
+export interface EraserStroke {
+  points: EraserPoint[]
+  radius: number // Percentage (0-100)
 }
 
 export interface ProcessOptions {
@@ -23,8 +26,8 @@ export interface ProcessOptions {
   trimMargins?: boolean
   /** Padding to add after trimming (in pixels) */
   padding?: number
-  /** Selection area to handle closed regions */
-  selection?: Selection
+  /** Eraser strokes to mark additional white areas for removal */
+  eraserStrokes?: EraserStroke[]
   /** Expansion distance in pixels to remove white halos */
   expansion?: number
 }
@@ -35,7 +38,7 @@ export interface ProcessOptions {
 export function removeWhiteBackground(
   imageData: ImageData,
   colorDistance = 30,
-  selection?: Selection,
+  eraserStrokes?: EraserStroke[],
   expansion = 0,
 ): void {
   const { data, width, height } = imageData
@@ -72,19 +75,67 @@ export function removeWhiteBackground(
     }
   }
 
-  // 2. If selection exists, scan all matching pixels inside as seeds (Force global removal in box)
-  if (selection) {
-    const startX = Math.max(0, Math.floor((selection.x / 100) * width))
-    const startY = Math.max(0, Math.floor((selection.y / 100) * height))
-    const endX = Math.min(width, Math.floor(((selection.x + selection.w) / 100) * width))
-    const endY = Math.min(height, Math.floor(((selection.y + selection.h) / 100) * height))
+  // 2. If eraser strokes exist, add white pixels along the stroke paths as seeds
+  if (eraserStrokes && eraserStrokes.length > 0) {
+    for (const stroke of eraserStrokes) {
+      // Calculate pixel radius from percentage for this stroke
+      const eraserRadius = Math.round((stroke.radius / 100) * Math.min(width, height))
 
-    for (let y = startY; y < endY; y++) {
-      for (let x = startX; x < endX; x++) {
-        const idx = y * width + x
-        if (!visited[idx] && isWhite(x, y)) {
-          visited[idx] = 1
-          queue.push(x, y)
+      // For each stroke, interpolate between points
+      for (let i = 0; i < stroke.points.length; i++) {
+        const point = stroke.points[i]
+        const centerX = Math.round((point.x / 100) * width)
+        const centerY = Math.round((point.y / 100) * height)
+
+        // Add all white pixels within the eraser radius
+        for (let dy = -eraserRadius; dy <= eraserRadius; dy++) {
+          for (let dx = -eraserRadius; dx <= eraserRadius; dx++) {
+            // Check if within circular radius
+            if (dx * dx + dy * dy > eraserRadius * eraserRadius)
+              continue
+
+            const px = centerX + dx
+            const py = centerY + dy
+            if (px >= 0 && px < width && py >= 0 && py < height) {
+              const idx = py * width + px
+              if (!visited[idx] && isWhite(px, py)) {
+                visited[idx] = 1
+                queue.push(px, py)
+              }
+            }
+          }
+        }
+
+        // Interpolate between current and next point for smooth coverage
+        if (i < stroke.points.length - 1) {
+          const nextPoint = stroke.points[i + 1]
+          const nextX = Math.round((nextPoint.x / 100) * width)
+          const nextY = Math.round((nextPoint.y / 100) * height)
+          const dist = Math.sqrt((nextX - centerX) ** 2 + (nextY - centerY) ** 2)
+          const steps = Math.max(1, Math.ceil(dist / (eraserRadius / 2)))
+
+          for (let s = 1; s < steps; s++) {
+            const t = s / steps
+            const interpX = Math.round(centerX + (nextX - centerX) * t)
+            const interpY = Math.round(centerY + (nextY - centerY) * t)
+
+            for (let dy = -eraserRadius; dy <= eraserRadius; dy++) {
+              for (let dx = -eraserRadius; dx <= eraserRadius; dx++) {
+                if (dx * dx + dy * dy > eraserRadius * eraserRadius)
+                  continue
+
+                const px = interpX + dx
+                const py = interpY + dy
+                if (px >= 0 && px < width && py >= 0 && py < height) {
+                  const idx = py * width + px
+                  if (!visited[idx] && isWhite(px, py)) {
+                    visited[idx] = 1
+                    queue.push(px, py)
+                  }
+                }
+              }
+            }
+          }
         }
       }
     }
@@ -116,6 +167,120 @@ export function removeWhiteBackground(
   // 4. Expansion logic: Grow the transparent mask into neighboring pixels
   if (expansion > 0) {
     const mask = new Uint8Array(visited)
+    for (let i = 0; i < expansion; i++) {
+      const nextSeeds: number[] = []
+      for (let y = 0; y < height; y++) {
+        for (let x = 0; x < width; x++) {
+          if (mask[y * width + x] === 1) {
+            for (let j = 0; j < 4; j++) {
+              const nx = x + dx[j]
+              const ny = y + dy[j]
+              if (nx >= 0 && nx < width && ny >= 0 && ny < height && mask[ny * width + nx] === 0) {
+                nextSeeds.push(nx, ny)
+              }
+            }
+          }
+        }
+      }
+      nextSeeds.forEach((_, idx) => {
+        if (idx % 2 === 0) {
+          const sx = nextSeeds[idx]
+          const sy = nextSeeds[idx + 1]
+          mask[sy * width + sx] = 1
+          data[(sy * width + sx) * 4 + 3] = 0
+        }
+      })
+    }
+  }
+}
+
+/**
+ * Erase white pixels only in the eraser stroke areas (no edge flood fill)
+ * Used for real-time eraser preview before final processing
+ */
+export function eraseWhiteInStrokes(
+  imageData: ImageData,
+  eraserStrokes: EraserStroke[],
+  colorDistance = 30,
+  expansion = 0,
+): void {
+  const { data, width, height } = imageData
+  const threshold = 255 - colorDistance
+
+  const isWhite = (x: number, y: number) => {
+    const idx = (y * width + x) * 4
+    return data[idx] >= threshold && data[idx + 1] >= threshold && data[idx + 2] >= threshold
+  }
+
+  // Track which pixels were erased for expansion
+  const erased = new Uint8Array(width * height)
+
+  // Only process pixels along the stroke paths
+  for (const stroke of eraserStrokes) {
+    // Calculate pixel radius from percentage for this stroke
+    const eraserRadius = Math.round((stroke.radius / 100) * Math.min(width, height))
+
+    for (let i = 0; i < stroke.points.length; i++) {
+      const point = stroke.points[i]
+      const centerX = Math.round((point.x / 100) * width)
+      const centerY = Math.round((point.y / 100) * height)
+
+      // Erase white pixels within the eraser radius
+      for (let dy = -eraserRadius; dy <= eraserRadius; dy++) {
+        for (let dx = -eraserRadius; dx <= eraserRadius; dx++) {
+          if (dx * dx + dy * dy > eraserRadius * eraserRadius)
+            continue
+
+          const px = centerX + dx
+          const py = centerY + dy
+          if (px >= 0 && px < width && py >= 0 && py < height) {
+            if (isWhite(px, py)) {
+              data[(py * width + px) * 4 + 3] = 0 // Set alpha to 0
+              erased[py * width + px] = 1
+            }
+          }
+        }
+      }
+
+      // Interpolate between current and next point
+      if (i < stroke.points.length - 1) {
+        const nextPoint = stroke.points[i + 1]
+        const nextX = Math.round((nextPoint.x / 100) * width)
+        const nextY = Math.round((nextPoint.y / 100) * height)
+        const dist = Math.sqrt((nextX - centerX) ** 2 + (nextY - centerY) ** 2)
+        const steps = Math.max(1, Math.ceil(dist / (eraserRadius / 2)))
+
+        for (let s = 1; s < steps; s++) {
+          const t = s / steps
+          const interpX = Math.round(centerX + (nextX - centerX) * t)
+          const interpY = Math.round(centerY + (nextY - centerY) * t)
+
+          for (let dy = -eraserRadius; dy <= eraserRadius; dy++) {
+            for (let dx = -eraserRadius; dx <= eraserRadius; dx++) {
+              if (dx * dx + dy * dy > eraserRadius * eraserRadius)
+                continue
+
+              const px = interpX + dx
+              const py = interpY + dy
+              if (px >= 0 && px < width && py >= 0 && py < height) {
+                if (isWhite(px, py)) {
+                  data[(py * width + px) * 4 + 3] = 0
+                  erased[py * width + px] = 1
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+
+  // Apply expansion to remove white halos around erased areas
+  if (expansion > 0) {
+    const dx = [1, -1, 0, 0]
+    const dy = [0, 0, 1, -1]
+    const mask = new Uint8Array(erased)
+
     for (let i = 0; i < expansion; i++) {
       const nextSeeds: number[] = []
       for (let y = 0; y < height; y++) {
@@ -191,7 +356,7 @@ export function processWhiteBackgroundImage(
     colorDistance = 30,
     trimMargins = true,
     padding = 0,
-    selection,
+    eraserStrokes,
     expansion = 0,
   } = options
 
@@ -203,7 +368,7 @@ export function processWhiteBackgroundImage(
   ctx.drawImage(image, 0, 0)
 
   const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height)
-  removeWhiteBackground(imageData, colorDistance, selection, expansion)
+  removeWhiteBackground(imageData, colorDistance, eraserStrokes, expansion)
   ctx.putImageData(imageData, 0, 0)
 
   if (!trimMargins) {

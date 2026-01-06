@@ -34,6 +34,26 @@ export interface SplitLine {
 }
 
 /**
+ * Eraser point type
+ */
+export interface EraserPoint {
+  /** X coordinate (percentage 0-100) */
+  x: number
+  /** Y coordinate (percentage 0-100) */
+  y: number
+}
+
+/**
+ * Eraser stroke type
+ */
+export interface EraserStroke {
+  /** Points in the stroke */
+  points: EraserPoint[]
+  /** Radius of the eraser brush (percentage 0-100) */
+  radius: number
+}
+
+/**
  * 图片项目类型
  * 用于后期处理的图片状态
  */
@@ -46,8 +66,8 @@ export interface ImageItem {
   processedSrc: string
   /** 文件名 */
   name: string
-  /** 选区（百分比 0-100） */
-  selection?: ImageSelection
+  /** 橡皮擦笔画（用于标记擦除区域） */
+  eraserStrokes?: EraserStroke[]
   /** 区域颜色距离（用于背景去除） */
   regionColorDistance?: number
 }
@@ -116,8 +136,8 @@ export interface ImageProcessParams {
   colorDistance: number
   /** 是否自动裁剪空白边缘 */
   autoTrim?: boolean
-  /** 选区（可选） */
-  selection?: ImageSelection
+  /** 橡皮擦笔画（可选） */
+  eraserStrokes?: EraserStroke[]
 }
 
 /**

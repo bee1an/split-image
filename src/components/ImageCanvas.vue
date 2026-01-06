@@ -607,7 +607,7 @@ async function playExportAnimation(targetElement: HTMLElement): Promise<void> {
     >
 
     <!-- Canvas wrapper for proper overlay positioning -->
-    <div class="bg-checkered rounded-sm relative overflow-hidden">
+    <div class="bg-checkered" rounded-sm relative overflow-hidden>
       <canvas
         ref="canvasRef"
         :style="{ cursor: cursorStyle }"

@@ -1,9 +1,10 @@
 <script setup lang="ts">
+import type { EraserPoint, EraserStroke } from '../composables/image'
 import UploadZone from '../components/UploadZone.vue'
 import { useImageState } from '../composables/image'
 import { useTempFolder } from '../composables/tempFolder'
 import { downloadAsZip } from '../utils/downloadZip'
-import { processWhiteBackgroundImage } from '../utils/imageProcess'
+import { eraseWhiteInStrokes, processWhiteBackgroundImage } from '../utils/imageProcess'
 
 const {
   items,
@@ -22,56 +23,115 @@ const processPadding = ref(0)
 const enableTrimMargins = ref(true)
 const isProcessing = ref(false)
 const selectedIds = ref<Set<string>>(new Set())
+const eraserRadius = ref(3) // Percentage of image size
 
 const { addFiles, open: openTempFolder } = useTempFolder()
 
-// Selection Interaction
+// Eraser Interaction
 const previewRef = ref<HTMLDivElement>()
+const eraserCanvasRef = ref<HTMLCanvasElement>()
 const isDrawing = ref(false)
-const dragStart = ref({ x: 0, y: 0 })
+const currentStroke = ref<EraserPoint[]>([])
 
-function handleSelectionStart(e: MouseEvent) {
+// Draw eraser strokes on canvas
+function drawEraserStrokes() {
+  const canvas = eraserCanvasRef.value
+  const preview = previewRef.value
+  if (!canvas || !preview)
+    return
+
+  const ctx = canvas.getContext('2d')
+  if (!ctx)
+    return
+
+  // Match canvas size to preview
+  const rect = preview.getBoundingClientRect()
+  canvas.width = rect.width
+  canvas.height = rect.height
+
+  ctx.clearRect(0, 0, canvas.width, canvas.height)
+
+  // Only draw current stroke being drawn (saved strokes are already applied to processedSrc)
+  if (currentStroke.value.length === 0)
+    return
+
+  ctx.strokeStyle = 'rgba(239, 68, 68, 0.8)' // Red color
+  ctx.lineCap = 'round'
+  ctx.lineJoin = 'round'
+
+  const pixelRadius = (eraserRadius.value / 100) * Math.min(canvas.width, canvas.height)
+  ctx.lineWidth = pixelRadius * 2
+
+  ctx.beginPath()
+  const startX = (currentStroke.value[0].x / 100) * canvas.width
+  const startY = (currentStroke.value[0].y / 100) * canvas.height
+  ctx.moveTo(startX, startY)
+
+  for (let i = 1; i < currentStroke.value.length; i++) {
+    const x = (currentStroke.value[i].x / 100) * canvas.width
+    const y = (currentStroke.value[i].y / 100) * canvas.height
+    ctx.lineTo(x, y)
+  }
+  ctx.stroke()
+}
+
+// Watch for changes and redraw
+watch([currentStroke, eraserRadius], drawEraserStrokes, { deep: true })
+
+// Redraw on resize
+onMounted(() => {
+  const observer = new ResizeObserver(drawEraserStrokes)
+  if (previewRef.value) {
+    observer.observe(previewRef.value)
+  }
+  onUnmounted(() => observer.disconnect())
+})
+
+function handleEraserStart(e: MouseEvent) {
   if (!currentItem.value || !previewRef.value)
     return
   isDrawing.value = true
   const rect = previewRef.value.getBoundingClientRect()
   const x = Math.max(0, Math.min(100, ((e.clientX - rect.left) / rect.width) * 100))
   const y = Math.max(0, Math.min(100, ((e.clientY - rect.top) / rect.height) * 100))
-  dragStart.value = { x, y }
-  updateItem(currentItem.value.id, {
-    selection: { x, y, w: 0, h: 0 },
-  })
+  currentStroke.value = [{ x, y }]
 
   const handleMouseMove = (em: MouseEvent) => {
-    if (!isDrawing.value || !currentItem.value)
+    if (!isDrawing.value)
       return
     const x2 = Math.max(0, Math.min(100, ((em.clientX - rect.left) / rect.width) * 100))
     const y2 = Math.max(0, Math.min(100, ((em.clientY - rect.top) / rect.height) * 100))
-
-    updateItem(currentItem.value.id, {
-      selection: {
-        x: Math.min(dragStart.value.x, x2),
-        y: Math.min(dragStart.value.y, y2),
-        w: Math.abs(x2 - dragStart.value.x),
-        h: Math.abs(y2 - dragStart.value.y),
-      },
-    })
+    currentStroke.value.push({ x: x2, y: y2 })
   }
 
-  const handleMouseUp = () => {
+  const handleMouseUp = async () => {
     isDrawing.value = false
     window.removeEventListener('mousemove', handleMouseMove)
     window.removeEventListener('mouseup', handleMouseUp)
+
+    // Save stroke to item and apply eraser only (not full processing)
+    if (currentItem.value && currentStroke.value.length > 0) {
+      const existingStrokes = currentItem.value.eraserStrokes || []
+      // Create new stroke with current radius
+      const newStroke: EraserStroke = {
+        points: [...currentStroke.value],
+        radius: eraserRadius.value,
+      }
+      const newStrokes = [...existingStrokes, newStroke]
+      updateItem(currentItem.value.id, {
+        eraserStrokes: newStrokes,
+      })
+
+      // Apply eraser stroke only (erase white in stroke area)
+      isProcessing.value = true
+      await applyEraserStroke(currentItem.value, newStroke)
+      isProcessing.value = false
+    }
+    currentStroke.value = []
   }
 
   window.addEventListener('mousemove', handleMouseMove)
   window.addEventListener('mouseup', handleMouseUp)
-}
-
-function clearSelection() {
-  if (currentItem.value) {
-    updateItem(currentItem.value.id, { selection: undefined })
-  }
 }
 
 async function handleUpload(files: File[]) {
@@ -88,7 +148,52 @@ async function handleUpload(files: File[]) {
   addImages(newFiles)
 }
 
-async function processSingleImage(item: any) {
+/**
+ * Apply eraser stroke only - erase white pixels in the stroke area
+ * Based on current processedSrc, not originalSrc
+ */
+async function applyEraserStroke(
+  item: typeof currentItem.value,
+  stroke: EraserStroke,
+) {
+  if (!item || stroke.points.length === 0)
+    return
+
+  return new Promise<void>((resolve) => {
+    const img = new Image()
+    img.crossOrigin = 'anonymous'
+    img.onload = () => {
+      try {
+        const canvas = document.createElement('canvas')
+        canvas.width = img.naturalWidth
+        canvas.height = img.naturalHeight
+        const ctx = canvas.getContext('2d', { willReadFrequently: true })!
+
+        ctx.drawImage(img, 0, 0)
+
+        const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height)
+        eraseWhiteInStrokes(imageData, [stroke], 30, processExpansion.value)
+        ctx.putImageData(imageData, 0, 0)
+
+        updateProcessedSrc(item.id, canvas.toDataURL('image/png'))
+        resolve()
+      }
+      catch (error) {
+        console.error(`Erasing stroke failed:`, error)
+        resolve()
+      }
+    }
+    // Use processedSrc so we build on previous eraser strokes
+    img.src = item.processedSrc
+  })
+}
+
+async function processSingleImage(
+  item: typeof currentItem.value,
+  eraserStrokesOverride?: typeof currentItem.value extends null ? never : NonNullable<typeof currentItem.value>['eraserStrokes'],
+) {
+  if (!item)
+    return
   return new Promise<void>((resolve) => {
     const img = new Image()
     img.crossOrigin = 'anonymous'
@@ -98,7 +203,7 @@ async function processSingleImage(item: any) {
           colorDistance: 30, // Default fixed tolerance
           padding: processPadding.value,
           trimMargins: enableTrimMargins.value,
-          selection: item.selection,
+          eraserStrokes: eraserStrokesOverride ?? item.eraserStrokes,
           expansion: processExpansion.value,
         })
         updateProcessedSrc(item.id, processedSrc)
@@ -205,33 +310,22 @@ async function handleAddSelectedToTemp() {
           <div v-if="currentItem" flex flex-1 items-center justify-center relative>
             <div
               ref="previewRef"
-              class="bg-checkered group/canvas rounded-xl cursor-crosshair select-none shadow-2xl relative overflow-hidden"
-              @mousedown="handleSelectionStart"
+              class="group/canvas bg-checkered rounded-xl cursor-crosshair select-none shadow-2xl relative overflow-hidden"
+              @mousedown="handleEraserStart"
             >
               <img :src="imageSrc" class="max-h-[60vh] w-auto block pointer-events-none object-contain">
 
-              <!-- Selection Box -->
-              <div
-                v-if="currentItem.selection"
-                border="2 emerald-500"
-                pointer-events-none absolute bg="emerald-500/10" shadow="[0_0_0_9999px_rgba(0,0,0,0.5)]"
-                :style="{
-                  left: `${currentItem.selection.x}%`,
-                  top: `${currentItem.selection.y}%`,
-                  width: `${currentItem.selection.w}%`,
-                  height: `${currentItem.selection.h}%`,
-                }"
-              >
-                <div text="[10px] white" bottom="full" font-bold mb-1 px-1.5 py-0.5 rounded bg-emerald-500 whitespace-nowrap left-0 absolute>
-                  选区内闭合区域将被清除
-                </div>
-              </div>
+              <!-- Eraser Canvas Overlay -->
+              <canvas
+                ref="eraserCanvasRef"
+                pointer-events-none inset-0 absolute
+              />
 
-              <!-- Selection Hint -->
-              <div v-if="!currentItem.selection" class="group-hover:opacity-100" bg="black/20" opacity-0 flex pointer-events-none transition-opacity items-center inset-0 justify-center absolute>
+              <!-- Eraser Hint -->
+              <div v-if="!isDrawing" class="group-hover/canvas:opacity-100" bg="black/20" opacity-0 flex pointer-events-none transition-opacity items-center inset-0 justify-center absolute>
                 <div px-4 py-2 rounded-full bg-white flex gap-2 shadow-xl items-center backdrop-blur dark:bg-zinc-900>
-                  <div i-carbon-area text-emerald-500 />
-                  <span text-xs font-bold>拖拽创建一个强制清除选区</span>
+                  <div i-carbon-paint-brush text-red-500 />
+                  <span text-xs font-bold>拖拽涂抹以擦除白色</span>
                 </div>
               </div>
             </div>
@@ -239,17 +333,9 @@ async function handleAddSelectedToTemp() {
             <!-- Quick Actions -->
             <div flex gap-3 bottom-0 absolute translate-y="1/2">
               <button
-                v-if="currentItem.selection"
-                text-white p-3 rounded-full bg-emerald-600 shadow-xl transition-all active:scale-90 hover:scale-110
-                title="清除选区"
-                @click="clearSelection"
-              >
-                <div i-carbon-close />
-              </button>
-              <button
                 bg="white dark:zinc-800" border="1 zinc-200 dark:zinc-700"
                 p-3 rounded-full shadow-xl transition-all active:scale-90 hover:scale-110
-                title="重置加工"
+                title="重置图片"
                 @click="resetToOriginal(currentItem.id)"
               >
                 <div i-carbon-reset text-zinc-600 />
@@ -358,7 +444,26 @@ async function handleAddSelectedToTemp() {
                 <span v-if="isProcessing" i-carbon-progress-bar-round text-emerald-500 animate-spin />
               </h3>
               <div space-y-6>
-                <!-- Color Distance is now internal/automatic -->
+                <!-- Eraser Brush Size -->
+                <div space-y-3>
+                  <div flex items-center justify-between>
+                    <label text="[10px] zinc-500 dark:zinc-400" flex gap-1 items-center>
+                      <div i-carbon-paint-brush text-red-500 />
+                      橡皮擦大小
+                    </label>
+                    <span text="[10px] red-500">{{ eraserRadius }}%</span>
+                  </div>
+                  <input
+                    v-model.number="eraserRadius"
+                    type="range"
+                    min="1"
+                    max="10"
+                    accent-red-500 w-full
+                  >
+                  <p text="[9px] zinc-400">
+                    在图片上涂抹白色区域以标记擦除
+                  </p>
+                </div>
 
                 <div space-y-3>
                   <div flex items-center justify-between>

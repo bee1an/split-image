@@ -10,6 +10,17 @@ export interface Position {
   y: number
 }
 
+export interface DraggableBounds {
+  /** Minimum x value */
+  minX?: number
+  /** Maximum x value */
+  maxX?: number
+  /** Minimum y value */
+  minY?: number
+  /** Maximum y value */
+  maxY?: number
+}
+
 export interface DraggableOptions {
   /**
    * 拖拽开始的阈值（像素），超过此距离才真正开始拖拽
@@ -21,6 +32,22 @@ export interface DraggableOptions {
    * 拖拽偏移量（用于面板拖拽，保持鼠标相对于元素的相对位置）
    */
   offset?: Ref<{ x: number, y: number }>
+
+  /**
+   * 被拖拽元素的引用（用于计算边界）
+   */
+  elementRef?: Ref<HTMLElement | undefined>
+
+  /**
+   * 固定的边界限制
+   */
+  bounds?: DraggableBounds
+
+  /**
+   * 是否限制在视口内
+   * @default false
+   */
+  constrainToViewport?: boolean
 
   /**
    * 拖拽开始时的回调（超过阈值后触发）
@@ -59,6 +86,9 @@ export function useDraggable(options: DraggableOptions = {}) {
   const {
     threshold = 5,
     offset,
+    elementRef,
+    bounds,
+    constrainToViewport = false,
     onDragStart,
     onDragMove,
     onDragEnd,
@@ -68,6 +98,38 @@ export function useDraggable(options: DraggableOptions = {}) {
   const isDragging = ref(false)
   const dragStart = ref({ x: 0, y: 0 })
   const hasMovedBeyondThreshold = ref(false)
+
+  /**
+   * 限制位置在边界内
+   */
+  function clampPosition(position: Position): Position {
+    let { x, y } = position
+
+    // Apply fixed bounds
+    if (bounds) {
+      if (bounds.minX !== undefined)
+        x = Math.max(bounds.minX, x)
+      if (bounds.maxX !== undefined)
+        x = Math.min(bounds.maxX, x)
+      if (bounds.minY !== undefined)
+        y = Math.max(bounds.minY, y)
+      if (bounds.maxY !== undefined)
+        y = Math.min(bounds.maxY, y)
+    }
+
+    // Apply viewport constraints
+    if (constrainToViewport) {
+      const viewportWidth = window.innerWidth
+      const viewportHeight = window.innerHeight
+      const elementWidth = elementRef?.value?.offsetWidth || 48
+      const elementHeight = elementRef?.value?.offsetHeight || 48
+
+      x = Math.max(0, Math.min(viewportWidth - elementWidth, x))
+      y = Math.max(0, Math.min(viewportHeight - elementHeight, y))
+    }
+
+    return { x, y }
+  }
 
   /**
    * 开始拖拽
@@ -95,8 +157,9 @@ export function useDraggable(options: DraggableOptions = {}) {
 
       // 如果已经开始拖拽，触发移动回调
       if (hasMovedBeyondThreshold.value) {
-        const newPosition = calculateNewPosition(em)
-        onDragMove?.(em, newPosition)
+        const rawPosition = calculateNewPosition(em)
+        const clampedPosition = clampPosition(rawPosition)
+        onDragMove?.(em, clampedPosition)
       }
     }
 

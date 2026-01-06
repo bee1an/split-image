@@ -2,12 +2,22 @@ import { createSharedComposable } from '@vueuse/core'
 import { computed, ref } from 'vue'
 import { generateId } from '../utils/common'
 
+export interface EraserPoint {
+  x: number // Percentage (0-100)
+  y: number // Percentage (0-100)
+}
+
+export interface EraserStroke {
+  points: EraserPoint[]
+  radius: number // Percentage (0-100)
+}
+
 export interface ImageItem {
   id: string
   originalSrc: string
   processedSrc: string
   name: string
-  selection?: { x: number, y: number, w: number, h: number } // Percentages (0-100)
+  eraserStrokes?: EraserStroke[] // Array of strokes with their radius
   regionColorDistance?: number
 }
 
