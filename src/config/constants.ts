@@ -92,6 +92,7 @@ export const TEMP_FOLDER_CONSTANTS = {
   SOURCE_LABELS: {
     split: '切',
     process: '处',
+    watermark: '水',
   } as const,
 } as const
 
