@@ -35,11 +35,62 @@ export function getDefaultMagentaCleanupOptions(tolerance: number): Required<Mag
 }
 
 /**
- * Check if a pixel is magenta (#ff00ff)
- * Magenta: R≈255, G≈0, B≈255
+ * Check if a pixel is magenta-ish using HSL hue detection
+ * Magenta hue is around 300° (range: 270°-330°)
+ * This is more robust against JPEG compression artifacts
  */
 function isMagenta(r: number, g: number, b: number, tolerance = 30): boolean {
-  return r >= 255 - tolerance && g <= tolerance && b >= 255 - tolerance
+  // Normalize to 0-1
+  const rn = r / 255
+  const gn = g / 255
+  const bn = b / 255
+
+  const max = Math.max(rn, gn, bn)
+  const min = Math.min(rn, gn, bn)
+  const delta = max - min
+
+  // Must have some saturation (not grayscale)
+  // Higher tolerance = more lenient saturation requirement
+  const saturationThreshold = Math.max(0.15, 0.5 - tolerance / 255)
+  if (max === 0 || delta / max < saturationThreshold) {
+    return false
+  }
+
+  // Must be reasonably bright
+  const lightnessThreshold = Math.max(0.3, 0.6 - tolerance / 255)
+  if ((max + min) / 2 < lightnessThreshold) {
+    return false
+  }
+
+  // Calculate hue (0-360)
+  let hue: number
+  if (delta === 0) {
+    return false
+  }
+  else if (max === rn) {
+    hue = 60 * (((gn - bn) / delta) % 6)
+  }
+  else if (max === gn) {
+    hue = 60 * ((bn - rn) / delta + 2)
+  }
+  else {
+    hue = 60 * ((rn - gn) / delta + 4)
+  }
+
+  if (hue < 0)
+    hue += 360
+
+  // Magenta hue range: 270°-330° (with tolerance extension)
+  // Higher tolerance = wider hue range
+  const hueMargin = 30 + tolerance / 5
+  const minHue = 300 - hueMargin
+  const maxHue = 300 + hueMargin
+
+  // Check if hue is in magenta range (handle wrap-around)
+  if (maxHue > 360) {
+    return hue >= minHue || hue <= maxHue - 360
+  }
+  return hue >= minHue && hue <= maxHue
 }
 
 function isMagentaSpill(r: number, g: number, b: number, spillThreshold: number): boolean {
@@ -291,6 +342,40 @@ export function imageDataToCanvas(imageData: ImageData): HTMLCanvasElement {
   const ctx = canvas.getContext('2d')!
   ctx.putImageData(imageData, 0, 0)
   return canvas
+}
+
+/**
+ * Remove semi-transparent white watermark using reverse alpha blending
+ * Based on the formula: original = (blended - watermark * alpha) / (1 - alpha)
+ * For white watermarks (RGB=255): original = (blended - 255 * alpha) / (1 - alpha)
+ *
+ * Reference: https://allenkuo.medium.com/removing-gemini-ai-watermarks-a-deep-dive-into-reverse-alpha-blending
+ */
+export function removeWatermark(
+  imageData: ImageData,
+  watermarkAlpha = 0.35,
+): void {
+  const { data } = imageData
+
+  // Precompute constants
+  const wa = watermarkAlpha
+  const oneMinusAlpha = 1 - wa
+  const watermarkContribution = 255 * wa
+
+  for (let i = 0; i < data.length; i += 4) {
+    // Skip fully transparent pixels
+    if (data[i + 3] === 0)
+      continue
+
+    // Apply reverse alpha blending to RGB channels
+    for (let c = 0; c < 3; c++) {
+      const blended = data[i + c]
+      // Reverse formula: original = (blended - 255 * alpha) / (1 - alpha)
+      const original = (blended - watermarkContribution) / oneMinusAlpha
+      // Clamp to valid range
+      data[i + c] = Math.max(0, Math.min(255, Math.round(original)))
+    }
+  }
 }
 
 /**

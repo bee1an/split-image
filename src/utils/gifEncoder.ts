@@ -3,7 +3,7 @@
  */
 
 import { encode } from 'modern-gif'
-import { cloneImageData, cropFromCenter, getDefaultMagentaCleanupOptions, removeMagentaBackground } from './spriteSheet'
+import { cloneImageData, cropFromCenter, getDefaultMagentaCleanupOptions, removeMagentaBackground, removeWatermark } from './spriteSheet'
 
 export interface GifOptions {
   /** Frame delay in milliseconds. Default 83 (12 FPS) */
@@ -16,6 +16,10 @@ export interface GifOptions {
   height?: number
   /** Magenta tolerance for background removal. Default 30. */
   tolerance?: number
+  /** Enable watermark removal. Default false. */
+  enableWatermarkRemoval?: boolean
+  /** Watermark alpha value for reverse blending. Default 0.35. */
+  watermarkAlpha?: number
 }
 
 /**
@@ -35,13 +39,24 @@ export async function createGif(
   frames: ImageData[],
   options: GifOptions = {},
 ): Promise<Blob> {
-  const { delay = 83, loop = true, width, height, tolerance = 30 } = options
+  const {
+    delay = 83,
+    loop = true,
+    width,
+    height,
+    tolerance = 30,
+    enableWatermarkRemoval = false,
+    watermarkAlpha = 0.35,
+  } = options
   const cleanup = getDefaultMagentaCleanupOptions(tolerance)
 
   // Apply center cropping + background removal if output size is specified
   const processedFrames = (width && height)
     ? frames.map((frame) => {
         const cleaned = cloneImageData(frame)
+        if (enableWatermarkRemoval) {
+          removeWatermark(cleaned, watermarkAlpha)
+        }
         removeMagentaBackground(cleaned, tolerance, cleanup)
         return cropFromCenter(cleaned, width, height)
       })

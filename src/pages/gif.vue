@@ -3,7 +3,7 @@ import { saveAs } from 'file-saver'
 import JSZip from 'jszip'
 import UploadZone from '../components/UploadZone.vue'
 import { createGif, fpsToDelay } from '../utils/gifEncoder'
-import { cloneImageData, cropFromCenter, getDefaultMagentaCleanupOptions, imageDataToDataURL, processSpriteSheet, removeMagentaBackground } from '../utils/spriteSheet'
+import { cloneImageData, cropFromCenter, getDefaultMagentaCleanupOptions, imageDataToDataURL, processSpriteSheet, removeMagentaBackground, removeWatermark } from '../utils/spriteSheet'
 
 // Prompt template for AI sprite sheet generation
 const PROMPT_TEMPLATE = `请生成一张精灵图（sprite sheet）
@@ -59,9 +59,11 @@ const imageName = ref('')
 const rows = ref(8)
 const cols = ref(8)
 const fps = ref(6)
-const tolerance = ref(150)
+const tolerance = ref(50)
 const outputWidth = ref(240)
 const outputHeight = ref(240)
+const enableWatermarkRemoval = ref(false)
+const watermarkAlpha = ref(0.35)
 
 // Default animation names matching the prompt template
 const DEFAULT_ANIMATION_NAMES = ['爱你', '开心', '吃饭饭', '早安安', '晚安安', '睡觉觉', '生气', '不理你了']
@@ -85,6 +87,9 @@ const frameDataUrls = computed(() => {
   return processedFrames.value.map(row =>
     row.map((imageData) => {
       const cleaned = cloneImageData(imageData)
+      if (enableWatermarkRemoval.value) {
+        removeWatermark(cleaned, watermarkAlpha.value)
+      }
       removeMagentaBackground(cleaned, tolerance.value, cleanup)
       const cropped = cropFromCenter(cleaned, outputWidth.value, outputHeight.value)
       return imageDataToDataURL(cropped)
@@ -181,6 +186,8 @@ async function generateGif(rowIndex: number) {
       width: outputWidth.value,
       height: outputHeight.value,
       tolerance: tolerance.value,
+      enableWatermarkRemoval: enableWatermarkRemoval.value,
+      watermarkAlpha: watermarkAlpha.value,
     })
     const url = URL.createObjectURL(blob)
 
@@ -213,7 +220,14 @@ function downloadSingleFrame(rowIdx: number, frameIdx: number) {
   if (!imageData)
     return
 
-  const cropped = cropFromCenter(imageData, outputWidth.value, outputHeight.value)
+  // Apply same processing as preview: clone -> remove watermark -> remove background -> crop
+  const cleanup = getDefaultMagentaCleanupOptions(tolerance.value)
+  const cleaned = cloneImageData(imageData)
+  if (enableWatermarkRemoval.value) {
+    removeWatermark(cleaned, watermarkAlpha.value)
+  }
+  removeMagentaBackground(cleaned, tolerance.value, cleanup)
+  const cropped = cropFromCenter(cleaned, outputWidth.value, outputHeight.value)
   const dataUrl = imageDataToDataURL(cropped)
 
   const animName = animationNames.value[rowIdx] || `animation_${rowIdx + 1}`
@@ -342,7 +356,7 @@ onUnmounted(() => {
               精灵图转 GIF
             </h2>
             <p text-sm text-zinc-500>
-              上传 AI 生成的精灵图（8列×7行，品红背景），自动切片、抠图并生成 GIF 动画。
+              上传 AI 生成的精灵图（支持任意行列数，品红背景），自动切片、抠图并生成 GIF 动画。
             </p>
           </div>
         </div>
@@ -814,6 +828,33 @@ onUnmounted(() => {
                       w-full
                       transition-colors
                       focus:border-emerald-500
+                    >
+                  </div>
+                </div>
+
+                <!-- Watermark Removal -->
+                <div space-y-2>
+                  <label flex gap-2 cursor-pointer items-center>
+                    <input
+                      v-model="enableWatermarkRemoval"
+                      type="checkbox"
+                      accent-emerald-500
+                    >
+                    <span text="[10px] zinc-500 dark:zinc-400">去除 AI 水印</span>
+                  </label>
+                  <div v-if="enableWatermarkRemoval" space-y-1.5>
+                    <div flex items-center justify-between>
+                      <label text="[10px] zinc-500 dark:zinc-400">水印透明度</label>
+                      <span text="[10px] emerald-500">{{ (watermarkAlpha * 100).toFixed(0) }}%</span>
+                    </div>
+                    <input
+                      v-model.number="watermarkAlpha"
+                      type="range"
+                      min="0.1"
+                      max="0.6"
+                      step="0.01"
+                      accent-emerald-500
+                      w-full
                     >
                   </div>
                 </div>
