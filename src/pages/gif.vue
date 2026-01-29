@@ -563,7 +563,7 @@ onUnmounted(() => {
         bg-white
         flex
         flex-col
-        w-72
+        w-80
         shadow-md
         shadow-zinc-200
         overflow-hidden
