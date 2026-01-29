@@ -63,6 +63,21 @@ import { toggleDark } from './composables/dark'
         </div>
       </RouterLink>
 
+      <RouterLink
+        v-slot="{ isActive }"
+        to="/watermark"
+        title="水印去除"
+      >
+        <div
+          p-3 rounded-xl transition-all
+          :bg="isActive ? 'emerald-500/10' : undefined"
+          :text="isActive ? 'emerald-500' : 'zinc-400'"
+          :hover="isActive ? undefined : 'bg-zinc-200 dark:bg-zinc-800'"
+        >
+          <div i-carbon-paint-brush text-xl />
+        </div>
+      </RouterLink>
+
       <div mt-auto flex flex-col gap-4 items-center>
         <button
           text-zinc-400 transition-colors hover:text-zinc-600 dark:hover:text-zinc-200

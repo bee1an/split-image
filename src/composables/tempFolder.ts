@@ -7,7 +7,7 @@ export interface TempFile {
   name: string
   src: string // base64 data URL
   createdAt: number
-  source: 'split' | 'process'
+  source: 'split' | 'process' | 'watermark'
 }
 
 export const useTempFolder = createSharedComposable(() => {
