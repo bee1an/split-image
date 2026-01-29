@@ -40,6 +40,9 @@ catalogs:
     jszip:
       specifier: ^3.10.1
       version: 3.10.1
+    modern-gif:
+      specifier: ^2.0.4
+      version: 2.0.4
     nanoid:
       specifier: ^5.1.6
       version: 5.1.6
@@ -115,7 +118,7 @@ importers:
         specifier: 'catalog:'
         version: 3.10.1
       modern-gif:
-        specifier: ^2.0.4
+        specifier: 'catalog:'
         version: 2.0.4
       nanoid:
         specifier: 'catalog:'
