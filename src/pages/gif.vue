@@ -350,8 +350,8 @@ onUnmounted(() => {
         <!-- Content with Image -->
         <div v-else flex flex-col h-full overflow-hidden>
           <!-- Animation Rows -->
-          <div flex-1 min-h-0 overflow-hidden>
-            <h3 text="[10px] zinc-500" tracking-wider font-bold mb-3 uppercase>
+          <div flex flex-1 flex-col min-h-0 overflow-hidden>
+            <h3 text="[10px] zinc-500" tracking-wider font-bold mb-3 flex-shrink-0 uppercase>
               生成的 GIF ({{ gifUrls.filter(Boolean).length }}/{{ animationCount }})
             </h3>
 
@@ -360,7 +360,8 @@ onUnmounted(() => {
               border="1 dashed zinc-200 dark:zinc-800"
               rounded-xl
               flex
-              h-full
+              flex-1
+              min-h-0
               items-center
               justify-center
             >
@@ -374,12 +375,8 @@ onUnmounted(() => {
             <div
               v-else
               class="custom-scrollbar"
-              pr-2
-              flex
-              flex-col
-              gap-2
-              h-full
-              overflow-y-auto
+
+              pb-2 pr-2 flex flex-1 flex-col gap-2 min-h-0 overflow-y-auto
             >
               <!-- Each Animation Row -->
               <div
