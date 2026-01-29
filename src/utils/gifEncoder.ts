@@ -3,7 +3,7 @@
  */
 
 import { encode } from 'modern-gif'
-import { cropFromCenter, removeMagentaBackground } from './spriteSheet'
+import { cloneImageData, cropFromCenter, getDefaultMagentaCleanupOptions, removeMagentaBackground } from './spriteSheet'
 
 export interface GifOptions {
   /** Frame delay in milliseconds. Default 83 (12 FPS) */
@@ -36,13 +36,14 @@ export async function createGif(
   options: GifOptions = {},
 ): Promise<Blob> {
   const { delay = 83, loop = true, width, height, tolerance = 30 } = options
+  const cleanup = getDefaultMagentaCleanupOptions(tolerance)
 
   // Apply center cropping + background removal if output size is specified
   const processedFrames = (width && height)
     ? frames.map((frame) => {
-        const cropped = cropFromCenter(frame, width, height)
-        removeMagentaBackground(cropped, tolerance)
-        return cropped
+        const cleaned = cloneImageData(frame)
+        removeMagentaBackground(cleaned, tolerance, cleanup)
+        return cropFromCenter(cleaned, width, height)
       })
     : frames
 

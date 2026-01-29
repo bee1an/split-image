@@ -12,12 +12,48 @@ export interface MagentaRemovalOptions {
   tolerance?: number
 }
 
+export interface MagentaCleanupOptions {
+  /** Expand transparent mask by N pixels to remove halos. Default 0. */
+  expansion?: number
+  /** Remove magenta spill on edge pixels (0-255). Default 0. */
+  despill?: number
+  /** Set RGB to 0 for transparent pixels. Default false. */
+  neutralize?: boolean
+}
+
+export function cloneImageData(imageData: ImageData): ImageData {
+  return new ImageData(new Uint8ClampedArray(imageData.data), imageData.width, imageData.height)
+}
+
+export function getDefaultMagentaCleanupOptions(tolerance: number): Required<MagentaCleanupOptions> {
+  const despill = Math.max(12, Math.round(tolerance * 0.2))
+  return {
+    expansion: 2,
+    despill,
+    neutralize: true,
+  }
+}
+
 /**
  * Check if a pixel is magenta (#ff00ff)
  * Magenta: R≈255, G≈0, B≈255
  */
 function isMagenta(r: number, g: number, b: number, tolerance = 30): boolean {
   return r >= 255 - tolerance && g <= tolerance && b >= 255 - tolerance
+}
+
+function isMagentaSpill(r: number, g: number, b: number, spillThreshold: number): boolean {
+  if (spillThreshold <= 0)
+    return false
+
+  if (r < 100 || b < 100)
+    return false
+
+  if (Math.abs(r - b) > 40)
+    return false
+
+  const strength = (r + b) / 2 - g
+  return strength >= spillThreshold
 }
 
 /**
@@ -27,10 +63,12 @@ function isMagenta(r: number, g: number, b: number, tolerance = 30): boolean {
 export function removeMagentaBackground(
   imageData: ImageData,
   tolerance = 30,
+  options: MagentaCleanupOptions = {},
 ): void {
   const { data, width, height } = imageData
   const visited = new Uint8Array(width * height)
   const queue: number[] = []
+  const { expansion = 0, despill = 0, neutralize = false } = options
 
   const checkMagenta = (x: number, y: number) => {
     const idx = (y * width + x) * 4
@@ -65,11 +103,12 @@ export function removeMagentaBackground(
   let head = 0
   const dx = [1, -1, 0, 0]
   const dy = [0, 0, 1, -1]
+  const dx8 = [1, 1, 1, 0, 0, -1, -1, -1]
+  const dy8 = [1, 0, -1, 1, -1, 1, 0, -1]
 
   while (head < queue.length) {
     const x = queue[head++]
     const y = queue[head++]
-    data[(y * width + x) * 4 + 3] = 0 // Set alpha to 0
 
     for (let i = 0; i < 4; i++) {
       const nx = x + dx[i]
@@ -80,6 +119,101 @@ export function removeMagentaBackground(
           visited[nIdx] = 1
           queue.push(nx, ny)
         }
+      }
+    }
+  }
+
+  const mask = new Uint8Array(visited)
+
+  if (expansion > 0) {
+    for (let i = 0; i < expansion; i++) {
+      const nextSeeds: number[] = []
+      for (let y = 0; y < height; y++) {
+        for (let x = 0; x < width; x++) {
+          if (mask[y * width + x] === 1) {
+            for (let j = 0; j < 8; j++) {
+              const nx = x + dx8[j]
+              const ny = y + dy8[j]
+              if (nx >= 0 && nx < width && ny >= 0 && ny < height) {
+                const nIdx = ny * width + nx
+                if (mask[nIdx] === 0) {
+                  nextSeeds.push(nx, ny)
+                }
+              }
+            }
+          }
+        }
+      }
+
+      for (let s = 0; s < nextSeeds.length; s += 2) {
+        const sx = nextSeeds[s]
+        const sy = nextSeeds[s + 1]
+        mask[sy * width + sx] = 1
+      }
+    }
+  }
+
+  for (let y = 0; y < height; y++) {
+    for (let x = 0; x < width; x++) {
+      const idx = y * width + x
+      if (mask[idx] === 1) {
+        const base = idx * 4
+        data[base + 3] = 0
+        if (neutralize) {
+          data[base] = 0
+          data[base + 1] = 0
+          data[base + 2] = 0
+        }
+      }
+    }
+  }
+
+  if (despill > 0) {
+    for (let y = 0; y < height; y++) {
+      for (let x = 0; x < width; x++) {
+        const idx = y * width + x
+        const base = idx * 4
+        const alpha = data[base + 3]
+        if (alpha === 0)
+          continue
+
+        let adjacentToMask = false
+        for (let n = 0; n < 8; n++) {
+          const nx = x + dx8[n]
+          const ny = y + dy8[n]
+          if (nx >= 0 && nx < width && ny >= 0 && ny < height) {
+            if (mask[ny * width + nx] === 1) {
+              adjacentToMask = true
+              break
+            }
+          }
+        }
+
+        if (!adjacentToMask)
+          continue
+
+        const r = data[base]
+        const g = data[base + 1]
+        const b = data[base + 2]
+        if (isMagentaSpill(r, g, b, despill)) {
+          data[base + 3] = 0
+          mask[idx] = 1
+          if (neutralize) {
+            data[base] = 0
+            data[base + 1] = 0
+            data[base + 2] = 0
+          }
+        }
+      }
+    }
+  }
+
+  if (neutralize) {
+    for (let i = 0; i < data.length; i += 4) {
+      if (data[i + 3] === 0) {
+        data[i] = 0
+        data[i + 1] = 0
+        data[i + 2] = 0
       }
     }
   }

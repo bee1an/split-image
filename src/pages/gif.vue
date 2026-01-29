@@ -3,7 +3,7 @@ import { saveAs } from 'file-saver'
 import JSZip from 'jszip'
 import UploadZone from '../components/UploadZone.vue'
 import { createGif, fpsToDelay } from '../utils/gifEncoder'
-import { cropFromCenter, imageDataToDataURL, processSpriteSheet, removeMagentaBackground } from '../utils/spriteSheet'
+import { cloneImageData, cropFromCenter, getDefaultMagentaCleanupOptions, imageDataToDataURL, processSpriteSheet, removeMagentaBackground } from '../utils/spriteSheet'
 
 // Prompt template for AI sprite sheet generation
 const PROMPT_TEMPLATE = `请生成一张精灵图（sprite sheet）
@@ -80,12 +80,13 @@ const frameDataUrls = computed(() => {
   if (processedFrames.value.length === 0)
     return []
 
+  const cleanup = getDefaultMagentaCleanupOptions(tolerance.value)
+
   return processedFrames.value.map(row =>
     row.map((imageData) => {
-      // Step 1: Crop from center
-      const cropped = cropFromCenter(imageData, outputWidth.value, outputHeight.value)
-      // Step 2: Remove magenta background (after cropping, edges are more likely to touch magenta)
-      removeMagentaBackground(cropped, tolerance.value)
+      const cleaned = cloneImageData(imageData)
+      removeMagentaBackground(cleaned, tolerance.value, cleanup)
+      const cropped = cropFromCenter(cleaned, outputWidth.value, outputHeight.value)
       return imageDataToDataURL(cropped)
     }),
   )
