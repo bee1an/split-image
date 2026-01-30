@@ -2,8 +2,9 @@
  * GIF encoding wrapper using modern-gif
  */
 
+import type { GeminiWatermarkEngine } from './geminiWatermark'
 import { encode } from 'modern-gif'
-import { cloneImageData, cropFromCenter, getDefaultMagentaCleanupOptions, removeMagentaBackground, removeWatermark } from './spriteSheet'
+import { cloneImageData, cropFromCenter, getDefaultMagentaCleanupOptions, removeMagentaBackground } from './spriteSheet'
 
 export interface GifOptions {
   /** Frame delay in milliseconds. Default 83 (12 FPS) */
@@ -18,8 +19,12 @@ export interface GifOptions {
   tolerance?: number
   /** Enable watermark removal. Default false. */
   enableWatermarkRemoval?: boolean
-  /** Watermark alpha value for reverse blending. Default 0.35. */
-  watermarkAlpha?: number
+  /** Gemini watermark engine instance for proper watermark removal. */
+  watermarkEngine?: GeminiWatermarkEngine | null
+  /** Use flood fill algorithm for background removal. Default true. */
+  useFloodFill?: boolean
+  /** Per-frame flood fill settings. If provided, overrides useFloodFill for each frame. */
+  perFrameFloodFill?: boolean[]
 }
 
 /**
@@ -46,16 +51,22 @@ export async function createGif(
     height,
     tolerance = 30,
     enableWatermarkRemoval = false,
-    watermarkAlpha = 0.35,
+    watermarkEngine = null,
+    useFloodFill = true,
+    perFrameFloodFill,
   } = options
-  const cleanup = getDefaultMagentaCleanupOptions(tolerance)
 
   // Apply center cropping + background removal if output size is specified
   const processedFrames = (width && height)
-    ? frames.map((frame) => {
+    ? frames.map((frame, idx) => {
+        const frameUseFloodFill = perFrameFloodFill?.[idx] ?? useFloodFill
+        const cleanup = {
+          ...getDefaultMagentaCleanupOptions(tolerance),
+          useFloodFill: frameUseFloodFill,
+        }
         const cleaned = cloneImageData(frame)
-        if (enableWatermarkRemoval) {
-          removeWatermark(cleaned, watermarkAlpha)
+        if (enableWatermarkRemoval && watermarkEngine) {
+          watermarkEngine.removeWatermark(cleaned)
         }
         removeMagentaBackground(cleaned, tolerance, cleanup)
         return cropFromCenter(cleaned, width, height)

@@ -2,8 +2,17 @@
 import { saveAs } from 'file-saver'
 import JSZip from 'jszip'
 import UploadZone from '../components/UploadZone.vue'
+import { type GeminiWatermarkEngine, getGeminiWatermarkEngine } from '../utils/geminiWatermark'
 import { createGif, fpsToDelay } from '../utils/gifEncoder'
-import { cloneImageData, cropFromCenter, getDefaultMagentaCleanupOptions, imageDataToDataURL, processSpriteSheet, removeMagentaBackground, removeWatermark } from '../utils/spriteSheet'
+import { cloneImageData, cropFromCenter, getDefaultMagentaCleanupOptions, imageDataToDataURL, processSpriteSheet, removeMagentaBackground } from '../utils/spriteSheet'
+
+// 使用这张图片作为基础图, 创建一个暖色背景的图片,满足以下要求
+// 1）JPG 或 PNG 格式，宽750 × 高400 像素，不超过 500KB
+// 2）图片中避免出现任何文字信息
+// 3）图片色调要活泼明朗，与微信底色有较大的区分，避免使用白色背景
+// 4）横幅内容须与表情有关，画面丰富，有故事性
+// 5）图中元素不能因被拉伸或压扁等原因导致变形
+// 6）避免使用透明背景
 
 // Prompt template for AI sprite sheet generation
 const PROMPT_TEMPLATE = `请生成一张精灵图（sprite sheet）
@@ -63,15 +72,22 @@ const tolerance = ref(50)
 const outputWidth = ref(240)
 const outputHeight = ref(240)
 const enableWatermarkRemoval = ref(false)
-const watermarkAlpha = ref(0.35)
+const useFloodFill = ref(true)
 
-// Default animation names matching the prompt template
-const DEFAULT_ANIMATION_NAMES = ['爱你', '开心', '吃饭饭', '早安安', '晚安安', '睡觉觉', '生气', '不理你了']
-const animationNames = ref<string[]>([...DEFAULT_ANIMATION_NAMES])
+// Gemini watermark engine
+const watermarkEngine = shallowRef<GeminiWatermarkEngine | null>(null)
+// Active frame menu (rowIdx-frameIdx or null)
+const activeFrameMenu = ref<string | null>(null)
+// Menu position for teleported dropdown
+const menuPosition = ref({ top: 0, left: 0 })
+
+const animationNames = ref<string[]>([])
 const isProcessing = ref(false)
 
 // Processed data: frames[row] = ImageData[] (cols frames per animation)
 const processedFrames = ref<ImageData[][]>([])
+// Per-frame flood fill setting: frameFloodFill[row][col]
+const frameFloodFill = ref<boolean[][]>([])
 // Generated GIF URLs
 const gifUrls = ref<string[]>([])
 // Per-animation generating state
@@ -82,14 +98,14 @@ const frameDataUrls = computed(() => {
   if (processedFrames.value.length === 0)
     return []
 
-  const cleanup = getDefaultMagentaCleanupOptions(tolerance.value)
-
-  return processedFrames.value.map(row =>
-    row.map((imageData) => {
-      const cleaned = cloneImageData(imageData)
-      if (enableWatermarkRemoval.value) {
-        removeWatermark(cleaned, watermarkAlpha.value)
+  return processedFrames.value.map((row, rowIdx) =>
+    row.map((imageData, colIdx) => {
+      const useFloodFillForFrame = frameFloodFill.value[rowIdx]?.[colIdx] ?? useFloodFill.value
+      const cleanup = {
+        ...getDefaultMagentaCleanupOptions(tolerance.value),
+        useFloodFill: useFloodFillForFrame,
       }
+      const cleaned = cloneImageData(imageData)
       removeMagentaBackground(cleaned, tolerance.value, cleanup)
       const cropped = cropFromCenter(cleaned, outputWidth.value, outputHeight.value)
       return imageDataToDataURL(cropped)
@@ -125,6 +141,7 @@ async function handleUpload(files: File[]) {
   imageSrc.value = src
   imageName.value = file.name.replace(/\.[^/.]+$/, '')
   processedFrames.value = []
+  frameFloodFill.value = []
   gifUrls.value = []
   generatingStates.value = []
 }
@@ -133,6 +150,7 @@ function handleClear() {
   imageSrc.value = ''
   imageName.value = ''
   processedFrames.value = []
+  frameFloodFill.value = []
   gifUrls.value = []
   generatingStates.value = []
 }
@@ -143,6 +161,7 @@ async function processImage() {
 
   isProcessing.value = true
   processedFrames.value = []
+  frameFloodFill.value = []
   gifUrls.value = []
   generatingStates.value = Array.from({ length: rows.value }, () => false)
 
@@ -157,14 +176,33 @@ async function processImage() {
     img.src = imageSrc.value
   })
 
+  // Remove watermark from original image before slicing (if enabled)
+  let sourceImage: HTMLImageElement | HTMLCanvasElement = img
+  if (enableWatermarkRemoval.value && watermarkEngine.value) {
+    const canvas = document.createElement('canvas')
+    canvas.width = img.naturalWidth
+    canvas.height = img.naturalHeight
+    const ctx = canvas.getContext('2d', { willReadFrequently: true })!
+    ctx.drawImage(img, 0, 0)
+    const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height)
+    watermarkEngine.value.removeWatermark(imageData)
+    ctx.putImageData(imageData, 0, 0)
+    sourceImage = canvas
+  }
+
   // Slice and process sprite sheet
   const slices = processSpriteSheet(
-    img,
+    sourceImage as HTMLImageElement,
     { rows: rows.value, cols: cols.value },
     { tolerance: tolerance.value },
   )
 
   processedFrames.value = slices
+
+  // Initialize per-frame flood fill settings (default: off for individual frames)
+  frameFloodFill.value = slices.map(row =>
+    row.map(() => false),
+  )
 
   isProcessing.value = false
 
@@ -187,7 +225,9 @@ async function generateGif(rowIndex: number) {
       height: outputHeight.value,
       tolerance: tolerance.value,
       enableWatermarkRemoval: enableWatermarkRemoval.value,
-      watermarkAlpha: watermarkAlpha.value,
+      watermarkEngine: watermarkEngine.value,
+      useFloodFill: useFloodFill.value,
+      perFrameFloodFill: frameFloodFill.value[rowIndex],
     })
     const url = URL.createObjectURL(blob)
 
@@ -220,12 +260,14 @@ function downloadSingleFrame(rowIdx: number, frameIdx: number) {
   if (!imageData)
     return
 
-  // Apply same processing as preview: clone -> remove watermark -> remove background -> crop
-  const cleanup = getDefaultMagentaCleanupOptions(tolerance.value)
-  const cleaned = cloneImageData(imageData)
-  if (enableWatermarkRemoval.value) {
-    removeWatermark(cleaned, watermarkAlpha.value)
+  // Apply same processing as preview: clone -> remove background -> crop
+  // Watermark already removed during processImage (before slicing)
+  const useFloodFillForFrame = frameFloodFill.value[rowIdx]?.[frameIdx] ?? false
+  const cleanup = {
+    ...getDefaultMagentaCleanupOptions(tolerance.value),
+    useFloodFill: useFloodFillForFrame,
   }
+  const cleaned = cloneImageData(imageData)
   removeMagentaBackground(cleaned, tolerance.value, cleanup)
   const cropped = cropFromCenter(cleaned, outputWidth.value, outputHeight.value)
   const dataUrl = imageDataToDataURL(cropped)
@@ -312,6 +354,36 @@ onUnmounted(() => {
       URL.revokeObjectURL(url)
   })
 })
+
+// Initialize watermark engine
+onMounted(async () => {
+  try {
+    watermarkEngine.value = await getGeminiWatermarkEngine()
+  }
+  catch (error) {
+    console.error('Failed to initialize watermark engine:', error)
+  }
+})
+
+function toggleFrameMenu(rowIdx: number, frameIdx: number, event: MouseEvent) {
+  const key = `${rowIdx}-${frameIdx}`
+  if (activeFrameMenu.value === key) {
+    activeFrameMenu.value = null
+  }
+  else {
+    const target = event.currentTarget as HTMLElement
+    const rect = target.getBoundingClientRect()
+    menuPosition.value = {
+      top: rect.bottom + 4,
+      left: rect.left,
+    }
+    activeFrameMenu.value = key
+  }
+}
+
+function closeFrameMenu() {
+  activeFrameMenu.value = null
+}
 </script>
 
 <template>
@@ -451,43 +523,17 @@ onUnmounted(() => {
                         object-contain
                       >
                     </div>
-                    <!-- Frame actions overlay -->
-                    <div
+                    <!-- Frame menu trigger (top-right corner) -->
+                    <button
                       class="group-hover:opacity-100"
+                      bg="black/60 hover:black/80"
+                      text="white/90 hover:white"
 
-                      bg="black/60"
-
-                      rounded-lg opacity-0 flex gap-1 transition-opacity items-center inset-0 justify-center absolute
+                      p-0.5 rounded opacity-0 transition-all right-0.5 top-0.5 absolute z-10
+                      @click.stop="toggleFrameMenu(rowIdx, frameIdx, $event)"
                     >
-                      <button
-                        text-white
-                        p-1.5
-                        rounded
-                        transition-colors
-                        hover:bg="white/20"
-                        title="下载帧"
-                        @click="downloadSingleFrame(rowIdx, frameIdx)"
-                      >
-                        <div i-carbon-download text-sm />
-                      </button>
-                      <label
-                        text-white
-                        p-1.5
-                        rounded
-                        cursor-pointer
-                        transition-colors
-                        hover:bg="white/20"
-                        title="替换帧"
-                      >
-                        <div i-carbon-upload text-sm />
-                        <input
-                          type="file"
-                          accept="image/*"
-                          hidden
-                          @change="(e) => { const f = (e.target as HTMLInputElement).files?.[0]; if (f) replaceFrame(rowIdx, frameIdx, f) }"
-                        >
-                      </label>
-                    </div>
+                      <div i-carbon-overflow-menu-vertical text-sm />
+                    </button>
                   </div>
                 </div>
 
@@ -842,21 +888,6 @@ onUnmounted(() => {
                     >
                     <span text="[10px] zinc-500 dark:zinc-400">去除 AI 水印</span>
                   </label>
-                  <div v-if="enableWatermarkRemoval" space-y-1.5>
-                    <div flex items-center justify-between>
-                      <label text="[10px] zinc-500 dark:zinc-400">水印透明度</label>
-                      <span text="[10px] emerald-500">{{ (watermarkAlpha * 100).toFixed(0) }}%</span>
-                    </div>
-                    <input
-                      v-model.number="watermarkAlpha"
-                      type="range"
-                      min="0.1"
-                      max="0.6"
-                      step="0.01"
-                      accent-emerald-500
-                      w-full
-                    >
-                  </div>
                 </div>
               </div>
             </section>
@@ -916,5 +947,61 @@ onUnmounted(() => {
         </div>
       </aside>
     </div>
+
+    <!-- Teleported frame menu -->
+    <Teleport to="body">
+      <div
+        v-if="activeFrameMenu"
+
+        inset-0 fixed z-50
+        @click="closeFrameMenu"
+      >
+        <div
+          bg="white dark:zinc-800"
+          border="1 zinc-200 dark:zinc-700"
+
+          py-1 rounded-lg min-w-24 shadow-xl fixed z-50
+          :style="{ top: `${menuPosition.top}px`, left: `${menuPosition.left}px` }"
+          @click.stop
+        >
+          <button
+            text="xs zinc-700 dark:zinc-300 hover:emerald-600"
+            bg="transparent hover:zinc-100 dark:hover:zinc-700"
+
+            px-3 py-1.5 text-left flex gap-2 w-full transition-colors items-center
+            @click="() => { const [r, f] = activeFrameMenu!.split('-').map(Number); downloadSingleFrame(r, f); closeFrameMenu() }"
+          >
+            <div i-carbon-download text-sm />
+            <span>下载</span>
+          </button>
+          <button
+            text="xs hover:emerald-600"
+            bg="transparent hover:zinc-100 dark:hover:zinc-700"
+
+            px-3 py-1.5 text-left flex gap-2 w-full transition-colors items-center
+            :class="(() => { const [r, f] = activeFrameMenu!.split('-').map(Number); return frameFloodFill[r]?.[f] ? 'text-emerald-600 dark:text-emerald-400' : 'text-zinc-700 dark:text-zinc-300' })()"
+            @click="() => { const [r, f] = activeFrameMenu!.split('-').map(Number); frameFloodFill[r][f] = !frameFloodFill[r][f]; regenerateGif(r); closeFrameMenu() }"
+          >
+            <div i-carbon-rain-drop text-sm />
+            <span>倒水 {{ (() => { const [r, f] = activeFrameMenu!.split('-').map(Number); return frameFloodFill[r]?.[f] ? '✓' : '' })() }}</span>
+          </button>
+          <label
+            text="xs zinc-700 dark:zinc-300 hover:emerald-600"
+            bg="transparent hover:zinc-100 dark:hover:zinc-700"
+
+            px-3 py-1.5 text-left flex gap-2 w-full cursor-pointer transition-colors items-center
+          >
+            <div i-carbon-upload text-sm />
+            <span>替换</span>
+            <input
+              type="file"
+              accept="image/*"
+              hidden
+              @change="(e) => { const f = (e.target as HTMLInputElement).files?.[0]; if (f && activeFrameMenu) { const [r, idx] = activeFrameMenu.split('-').map(Number); replaceFrame(r, idx, f); closeFrameMenu() } }"
+            >
+          </label>
+        </div>
+      </div>
+    </Teleport>
   </div>
 </template>

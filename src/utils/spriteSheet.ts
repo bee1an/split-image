@@ -19,6 +19,8 @@ export interface MagentaCleanupOptions {
   despill?: number
   /** Set RGB to 0 for transparent pixels. Default false. */
   neutralize?: boolean
+  /** Use flood fill from edges (true) or global replacement (false). Default true. */
+  useFloodFill?: boolean
 }
 
 export function cloneImageData(imageData: ImageData): ImageData {
@@ -107,75 +109,21 @@ function isMagentaSpill(r: number, g: number, b: number, spillThreshold: number)
   return strength >= spillThreshold
 }
 
+const dx8 = [1, 1, 1, 0, 0, -1, -1, -1]
+const dy8 = [1, 0, -1, 1, -1, 1, 0, -1]
+
 /**
- * Remove magenta background using flood fill from edges
- * Similar approach to removeWhiteBackground but for magenta color
+ * Apply expansion and despill to the mask
  */
-export function removeMagentaBackground(
-  imageData: ImageData,
-  tolerance = 30,
-  options: MagentaCleanupOptions = {},
+function applyExpansionAndDespill(
+  data: Uint8ClampedArray,
+  mask: Uint8Array,
+  width: number,
+  height: number,
+  expansion: number,
+  despill: number,
+  neutralize: boolean,
 ): void {
-  const { data, width, height } = imageData
-  const visited = new Uint8Array(width * height)
-  const queue: number[] = []
-  const { expansion = 0, despill = 0, neutralize = false } = options
-
-  const checkMagenta = (x: number, y: number) => {
-    const idx = (y * width + x) * 4
-    return isMagenta(data[idx], data[idx + 1], data[idx + 2], tolerance)
-  }
-
-  // Seed from edges
-  for (let x = 0; x < width; x++) {
-    if (checkMagenta(x, 0) && !visited[x]) {
-      queue.push(x, 0)
-      visited[x] = 1
-    }
-    const bottomIdx = (height - 1) * width + x
-    if (checkMagenta(x, height - 1) && !visited[bottomIdx]) {
-      queue.push(x, height - 1)
-      visited[bottomIdx] = 1
-    }
-  }
-  for (let y = 1; y < height - 1; y++) {
-    if (checkMagenta(0, y) && !visited[y * width]) {
-      queue.push(0, y)
-      visited[y * width] = 1
-    }
-    const rightIdx = y * width + (width - 1)
-    if (checkMagenta(width - 1, y) && !visited[rightIdx]) {
-      queue.push(width - 1, y)
-      visited[rightIdx] = 1
-    }
-  }
-
-  // Flood fill
-  let head = 0
-  const dx = [1, -1, 0, 0]
-  const dy = [0, 0, 1, -1]
-  const dx8 = [1, 1, 1, 0, 0, -1, -1, -1]
-  const dy8 = [1, 0, -1, 1, -1, 1, 0, -1]
-
-  while (head < queue.length) {
-    const x = queue[head++]
-    const y = queue[head++]
-
-    for (let i = 0; i < 4; i++) {
-      const nx = x + dx[i]
-      const ny = y + dy[i]
-      if (nx >= 0 && nx < width && ny >= 0 && ny < height) {
-        const nIdx = ny * width + nx
-        if (!visited[nIdx] && checkMagenta(nx, ny)) {
-          visited[nIdx] = 1
-          queue.push(nx, ny)
-        }
-      }
-    }
-  }
-
-  const mask = new Uint8Array(visited)
-
   if (expansion > 0) {
     for (let i = 0; i < expansion; i++) {
       const nextSeeds: number[] = []
@@ -204,6 +152,7 @@ export function removeMagentaBackground(
     }
   }
 
+  // Apply mask to image data
   for (let y = 0; y < height; y++) {
     for (let x = 0; x < width; x++) {
       const idx = y * width + x
@@ -271,23 +220,122 @@ export function removeMagentaBackground(
 }
 
 /**
+ * Remove magenta background using flood fill from edges or global replacement
+ * Similar approach to removeWhiteBackground but for magenta color
+ */
+export function removeMagentaBackground(
+  imageData: ImageData,
+  tolerance = 30,
+  options: MagentaCleanupOptions = {},
+): void {
+  const { data, width, height } = imageData
+  const { expansion = 0, despill = 0, neutralize = false, useFloodFill = true } = options
+
+  // Global replacement mode: simply replace all magenta pixels
+  if (!useFloodFill) {
+    // Build mask for expansion/despill processing
+    const mask = new Uint8Array(width * height)
+    for (let y = 0; y < height; y++) {
+      for (let x = 0; x < width; x++) {
+        const idx = y * width + x
+        const base = idx * 4
+        if (isMagenta(data[base], data[base + 1], data[base + 2], tolerance)) {
+          mask[idx] = 1
+          data[base + 3] = 0
+          if (neutralize) {
+            data[base] = 0
+            data[base + 1] = 0
+            data[base + 2] = 0
+          }
+        }
+      }
+    }
+
+    // Apply expansion and despill for global mode too
+    applyExpansionAndDespill(data, mask, width, height, expansion, despill, neutralize)
+    return
+  }
+
+  // Flood fill mode: start from edges
+  const visited = new Uint8Array(width * height)
+  const queue: number[] = []
+
+  const checkMagenta = (x: number, y: number) => {
+    const idx = (y * width + x) * 4
+    return isMagenta(data[idx], data[idx + 1], data[idx + 2], tolerance)
+  }
+
+  // Seed from edges
+  for (let x = 0; x < width; x++) {
+    if (checkMagenta(x, 0) && !visited[x]) {
+      queue.push(x, 0)
+      visited[x] = 1
+    }
+    const bottomIdx = (height - 1) * width + x
+    if (checkMagenta(x, height - 1) && !visited[bottomIdx]) {
+      queue.push(x, height - 1)
+      visited[bottomIdx] = 1
+    }
+  }
+  for (let y = 1; y < height - 1; y++) {
+    if (checkMagenta(0, y) && !visited[y * width]) {
+      queue.push(0, y)
+      visited[y * width] = 1
+    }
+    const rightIdx = y * width + (width - 1)
+    if (checkMagenta(width - 1, y) && !visited[rightIdx]) {
+      queue.push(width - 1, y)
+      visited[rightIdx] = 1
+    }
+  }
+
+  // Flood fill
+  let head = 0
+  const dx = [1, -1, 0, 0]
+  const dy = [0, 0, 1, -1]
+
+  while (head < queue.length) {
+    const x = queue[head++]
+    const y = queue[head++]
+
+    for (let i = 0; i < 4; i++) {
+      const nx = x + dx[i]
+      const ny = y + dy[i]
+      if (nx >= 0 && nx < width && ny >= 0 && ny < height) {
+        const nIdx = ny * width + nx
+        if (!visited[nIdx] && checkMagenta(nx, ny)) {
+          visited[nIdx] = 1
+          queue.push(nx, ny)
+        }
+      }
+    }
+  }
+
+  const mask = new Uint8Array(visited)
+
+  applyExpansionAndDespill(data, mask, width, height, expansion, despill, neutralize)
+}
+
+/**
  * Slice a sprite sheet into a 2D grid of ImageData
  * Returns ImageData[row][col]
  */
 export function sliceSpriteSheet(
-  image: HTMLImageElement,
+  image: HTMLImageElement | HTMLCanvasElement,
   options: SliceOptions,
 ): ImageData[][] {
   const { rows, cols } = options
   const canvas = document.createElement('canvas')
-  canvas.width = image.naturalWidth
-  canvas.height = image.naturalHeight
+  const imgWidth = image instanceof HTMLImageElement ? image.naturalWidth : image.width
+  const imgHeight = image instanceof HTMLImageElement ? image.naturalHeight : image.height
+  canvas.width = imgWidth
+  canvas.height = imgHeight
   const ctx = canvas.getContext('2d', { willReadFrequently: true })!
 
   ctx.drawImage(image, 0, 0)
 
-  const cellWidth = Math.floor(image.naturalWidth / cols)
-  const cellHeight = Math.floor(image.naturalHeight / rows)
+  const cellWidth = Math.floor(imgWidth / cols)
+  const cellHeight = Math.floor(imgHeight / rows)
 
   const result: ImageData[][] = []
 
